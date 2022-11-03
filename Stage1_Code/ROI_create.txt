@@ -1,0 +1,70 @@
+
+# Below is the code for creating the binarized masks used in the 
+subsequent analyses. 
+# This is simply for informational purposes
+# 
+https://nilearn.github.io/dev/modules/generated/nilearn.datasets.fetch_atlas_harvard_oxford.html
+harvardOxf_cort = 
+datasets.fetch_atlas_harvard_oxford('cort-maxprob-thr50-2mm',
+                                                      data_dir = 
+data_dir,symmetric_split=True)
+harvardOxf_subcort = 
+datasets.fetch_atlas_harvard_oxford('sub-maxprob-thr50-2mm',
+                                                        data_dir = 
+data_dir,symmetric_split=True)
+# Select Index of ROIs & resampling to beta_map space (e.g., MNI 2009)
+L_Ins = image.math_img('img == %s' % 3,
+                       img=harvardOxf_cort.maps)
+R_Ins = image.math_img('img == %s' % 4,
+                       img=harvardOxf_cort.maps)
+L_NAcc = image.math_img('img == %s' % 12,
+                       img=harvardOxf_subcort.maps)
+R_NAcc = image.math_img('img == %s' % 22,
+                       img=harvardOxf_subcort.maps)
+
+# getting reference bet map
+beta_map = 
+image.load_img(f'{fmri_prep}/sub-21/ses-1/func/sub-21_ses-1_task-mid_run-01_space-MNI152NLin2009cAsym_res-2_desc-brain_mask.nii.gz')
+
+# converting ROI to MNI 2009 space
+L_Ins_r = image.resample_img(
+        L_Ins,
+        target_affine=beta_map.affine,
+        target_shape=beta_map.shape[:3]
+)
+R_Ins_r = image.resample_img(
+        R_Ins,
+        target_affine=beta_map.affine,
+        target_shape=beta_map.shape[:3]
+)
+L_NAcc_r = image.resample_img(
+        L_NAcc,
+        target_affine=beta_map.affine,
+        target_shape=beta_map.shape[:3]
+)
+R_NAcc_r = image.resample_img(
+        R_NAcc,
+        target_affine=beta_map.affine,
+        target_shape=beta_map.shape[:3]
+)
+
+# Bin values
+R_Ins_bin = image.binarize_img(R_Ins_r)
+L_Ins_bin = image.binarize_img(L_Ins_r)
+R_NAcc_bin = image.binarize_img(R_NAcc_r)
+L_NAcc_bin = image.binarize_img(L_NAcc_r)
+
+# Import the neurosynth map
+neurosynth_AI = image.load_img(f'{data_dir}/anterior insula_association-test_z_FDR_0.01.nii.gz')
+
+ns_AI_r = R_Ins_r = image.resample_img(neurosynth_AI,
+                                       target_affine=beta_map.affine,
+                                       target_shape=beta_map.shape[:3]
+                                       )
+# threshold and binarize map at 8, which is approx 50%
+AI_bin = image.binarize_img(ns_AI_r, threshold=8, mask_img=None)
+
+# Binarize and mask by Harvard-Oxford ROIs (doing as separate step as
+max)
+L_AI_bin = image.binarize_img(AI_bin, mask_img=L_Ins_bin)
+R_AI_bin = image.binarize_img(AI_bin, mask_img=R_Ins_bin)

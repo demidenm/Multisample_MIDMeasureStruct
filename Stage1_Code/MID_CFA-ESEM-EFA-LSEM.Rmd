@@ -20,12 +20,21 @@ output:
 tags: []
 subtitle: <h2><u></u></h2>
 ---
+***
+***
+```{r include=FALSE}
+sess_vers <- version
+platform <- sess_vers$platform
+r_info <- sess_vers$version.string
+```
+
+The platform used to write and generate this .html document is `cat(platform)` on RStudio, `cat(r_info)`. The required packages to run all necessary code chunks are checked and installed using the [pacman](https://www.rdocumentation.org/packages/pacman/versions/0.5.1) R package. `p_load` from the package is used to load and install all listed packages. The details for a number of packages are described before their use. If they are not, the `.rmd` file will provide the list of packages that are installed. 
 
 ```{r include=FALSE}
 # Automatically check and install necessary packages that were used in R v 4.0
 
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(simsem, plyr, tidyverse,corrplot, reshape2, data.table,ggplot2,esemComp,
+pacman::p_load(simsem, plyr, tidyverse,corrplot, reshape2, data.table,ggplot2,esemComp, jpeg,
                Hmisc,nFactors,car,psych, paran, #for EFA
                semTools, semPlot, lavaan, # FOR CFA/ESEM
                parameters, superheat,weights, devtools, heatmaply, # For plotting/tabling
@@ -38,13 +47,15 @@ pacman::p_load(simsem, plyr, tidyverse,corrplot, reshape2, data.table,ggplot2,es
 
 # Simulating data {.tabset}
 
-This section fits a population model of the theoretical phenomenon that are involved in the reward processing construct. 
-The idea is that there are approach and avoidance (measured phenomena) characteristics that are associated with stimuli within/across tasks. There is no `ground truth` of these processes at the individual. Nevertheless, the phenomena are important to the broad construct of reward processing, which within the MID task are hypothesized to reflect the the multidimensional affective circumplex model. As formalized here, in the MID task the contrasts reflect the phenomenon (i.e., reflective model) as opposed of the other way, whereby the items form the phenomenon (i.e., formativefmodel).
+This section is unique only to the Stage 1 registered reported. We are not using any real data, so to ensure that each step is completed correctly, we use simulated data. We can operate under the assumption that all participants will have no missing values given how exclusion criteria are applied and fMRI data are extracted from the BOLD timeseries.
+ 
+
+In this section, a population model is fit reflecting the theoretical phenomenon that are involved in the reward processing construct. The idea is that there are approach and avoidance (measured constructs) characteristics that are associated with stimuli within/across tasks (Manifest variables). There is no `ground truth` of these processes at the individual. Nevertheless, the variables are important to the broad construct of approach and avoidance that are sub-constructs of the higher-order reward processing construct. In the MID task these constructs are hypothesized to reflect the the multidimensional affective circumplex model. As formalized here, in the MID task the contrasts reflect the manifest variables (i.e., reflective model) as opposed of the other way, whereby the items form the variables predict the construct (i.e., formative model).
 
 ## Specify Population Model
 
 Start off by specifying the **population** model. In this scenario, the individual runs load onto the specific Contrast and ROI combinations. Then, the ROIs are loaded onto the factors `approach` and `avoidance`.
-The approach and avoidance are specified as *negatively* correlated and the factor variances are fixed to `1`.
+The approach and avoidance are specified as *negatively* correlated and the factor variances are fixed to `1`. This is because in the multidimensional circumplex model, when the span of the contrasts are considered, these measures will likely not be orthogonal but instead >90 degree in space.
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 population_model<-'
@@ -91,34 +102,29 @@ Approach ~~ -.6*Avoid
 Approach ~~ 1*Approach
 Avoid ~~ 1*Avoid
 
-# Factor means/intercepts
-#Approach ~ 1
-#Avoid ~ 1
 '
 ```
 
 ## General samples
 
-Using the population model, [simsem](https://simsem.org/) is used to create simulated data based on the population model. This generates a `fake` dataset that is used to pilot the planned CFA, ESEM, EFA and Local SEM models
+Using the population model, [simsem](https://simsem.org/) is used to create simulated data. This generates a `fake` dataset that is used to pilot the planned Mutligroup CFA, ESEM, EFA and Local SEM models
 
 In this case, 50 repetitions are simulated per model for an *approximate* N sample for each study. Even though the factor variances are specified in the population model as '1', this model fixeds all latent variables using `std.lv = TRUE`.
 
- 1. AHRB N = 104
- 2. MLS N = 120
+ 1. AHRB N = 108
+ 2. MLS N = 159
  3. ABCD N = 1000
   
   
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
-# Using simsem to fit population model by creating a simulated set of 50 population sets. Do this for a dummy AHRB, MLS and ABCD sample
-# the samples size is mean to be comparable to what I'd estimate I'd have access to in the real data.
 set.seed(25151215)
-sim_AHRB <- simsem::sim(nRep = 50, model = "lavaan", n = 104, 
+sim_AHRB <- simsem::sim(nRep = 50, model = "lavaan", n = 108, 
            generate = population_model, std.lv = TRUE, lavaanfun = "sem", 
            # std.lv ~ ix the variances of all the latent variables 
            dataOnly=T, meanstructure = FALSE, seed=123)
 
-sim_MLS <- simsem::sim(nRep = 50, model = "lavaan", n = 120, 
+sim_MLS <- simsem::sim(nRep = 50, model = "lavaan", n = 159, 
                 generate = population_model, std.lv = TRUE, lavaanfun = "sem", 
                 dataOnly=T, meanstructure = FALSE, seed=123)
 
@@ -128,10 +134,9 @@ sim_ABCD <- simsem::sim(nRep = 50, model = "lavaan", n = 1000,
 ```
 
 
-Average each repeptition for sample simulated. For example, after 50 repitions of 1000 participants for the population model of ABCD sample, an average estimate is derived using [aaply](https://www.guru99.com/r-apply-sapply-tapply.html). For each study, the `set` variable is created to differentiate which sample the data is associated with (i.e., grouping variable).
+Average each repetition for each simulated sample. For example, after 50 repetitions of 1000 participants for the population model of ABCD sample, an average estimate is derived using [aaply](https://www.guru99.com/r-apply-sapply-tapply.html). For each study, the `set` variable is created to differentiate which sample the data is associated with (i.e., grouping variable). In this case, `AHRB = 3`, `MLS = 2`, `ABCD = 1`. 
 
 ```{r}
-# for each simulate sets (50) of data, taking the mean of sets to create final study specific datasets, AHRB (3), MLS (2), ABCD (1)
 sim_AHRB_data <- data.frame(aaply(laply(sim_AHRB, as.matrix), c(2,3), mean))
   sim_AHRB_data$set <-3
   
@@ -142,15 +147,15 @@ sim_ABCD_data <- data.frame(aaply(laply(sim_ABCD, as.matrix), c(2,3), mean))
   sim_ABCD_data$set <-1
 ```
 
-Next, row bind the data sets to form one complete data
+Next, row bind the data sets to form one complete data. This equivalent to stacking the datasets and only retaining a single header row (since all variable names are constant). This creates a 1267 x 49 data matrix (48 brain variables + sample label)
 ```{r}
-#Combining the dataset to create a 2259 (combined participants) x 25 (variables)
 brain_set <- rbind(sim_AHRB_data,sim_MLS_data,sim_ABCD_data)
 ```
 
 ## Correlation matrix of data
 
-Here, a combination of [rcorr](https://www.rdocumentation.org/packages/Hmisc/versions/4.7-1/topics/rcorr) and [corrplot](https://cran.r-project.org/web/packages/corrplot/vignettes/corrplot-intro.html) is used visualize the data. 
+Here, a combination of [rcorr](https://www.rdocumentation.org/packages/Hmisc/versions/4.7-1/topics/rcorr) and [corrplot](https://cran.r-project.org/web/packages/corrplot/vignettes/corrplot-intro.html) are used to visualize the associations among the brain variables in the dataset.
+
 ```{r}
 # Using Hmisc to create a 24x24 matrix for a list (3) that contains: the pearson's r corr, sample size (N), and significance (p).
 Brain_corr = rcorr(as.matrix(subset(brain_set,select=-c(set))), # excluding the set of data related to sample
@@ -173,9 +178,9 @@ corrplot(Brain_corr$r, type = "upper",
 ***
 ***
 
-# Running [restricted] CFA + Multigroup CFA {.tabset}
+# Running [restricted] Multigroup CFA {.tabset}
 
-Run the CFA multi-group analysis for the three datasets. Multi-group CFA tests the measurement invariance across defined groups to determine whether soft and strict invariance criteria are met and the degree to which the derive estimates for an item in one study can be compared to the same item in another sample. In this case, the focus is on the configural (structure) and metric invariance (loadings). In short, this model evalutes whether factor structure and loadings for the approach and avoidance model are invariant (dont significant differ) across the samples. 
+Run the CFA multi-group analysis for the three datasets. Multi-group CFA tests the measurement invariance across defined groups to determine whether soft and strict invariance criteria are met and the degree to which the derive estimates for an item in one study can be compared to the same item in another sample. In this case, the focus is on the configural (structure) and metric invariance (loadings). In short, this model evaluates whether factor structure and loadings for the approach and avoidance model are invariant (dont significant differ) across the samples. 
 
 Code here is based on measurement invariance models from [Maasen et al. 2019](https://osf.io/j72t4/), Measurement invariance presentation from [Kate Xu](https://users.ugent.be/~yrosseel/lavaan/multiplegroup6Dec2012.pdf) and Multi-group CFA tutorial from [Hirschfeld & Brachel (2014)](https://doi.org/10.7275/qazy-2946).
 
@@ -184,58 +189,9 @@ The issue of multi-group is invariance what is discussed in [Borsboom (2006)](ww
 A tutorial on CFA broadly is available from Lizbeth Benzon and Nilam Ram [here](https://quantdev.ssri.psu.edu/tutorials/intro-basic-confirmatory-factor-analysis) and tutorial of measurement invariance (in context of longitudinal data) from Nilam Ram is available [here](https://quantdev.ssri.psu.edu/tutorials/intro-basics-longitudinal-measurement-invariance)
 
 
-## *Not used* CFA Model
+## CFA model 
 
-The initial idea was to fit values **from each run** (e.g., run 1 and run 2 for RightNACC_Contrast1) onto a single indicator (i.e., RightNAcc_Contrast1) to account for reliability across runs. However, the run data often consist of lower ICC values and so the model may have trouble converging. This method will also create a path-to-sample ratio of 1 to <=3. This is pretty low and may produce unreliable estimates in the maximum likelihood framework (even if using robust estimate) (see Kline 2015 book on **Principles and Practice of Structural Equation Modeling**)
-
-Below is an example of a model that will *not be used* due to smaller N but may be in future large N samples.
-
-```{r eval=FALSE, include=TRUE}
-
-MID_model_notused <-'
-# Run Loadings
-# To impose equality contraints across runs? Too many runs to estimates with to few data? Not using here at this time
- AWin_v_Neut_R_NAcc    =~  AWin_v_Neut_R_NAcc_run1   + AWin_v_Neut_R_NAcc_run2
- AWin_v_Neut_R_Insula  =~  AWin_v_Neut_R_Insula_run1 + AWin_v_Neut_R_Insula_run2
- BWin_v_Neut_R_NAcc    =~  BWin_v_Neut_R_NAcc_run1   + BWin_v_Neut_R_NAcc_run2
- BWin_v_Neut_R_Insula  =~  BWin_v_Neut_R_Insula_run1 + BWin_v_Neut_R_Insula_run2
- BWin_v_BLose_R_NAcc   =~  BWin_v_BLose_R_NAcc_run1  + BWin_v_BLose_R_NAcc_run2
- BWin_v_BLose_R_Insula  =~ BWin_v_BLose_R_Insula_run1+ BWin_v_BLose_R_Insula_run2
- ALose_v_Neut_R_NAcc   =~  ALose_v_Neut_R_NAcc_run1  + ALose_v_Neut_R_NAcc_run2
- ALose_v_Neut_R_Insula =~  ALose_v_Neut_R_Insula_run1+ ALose_v_Neut_R_Insula_run2  
- BLose_v_Neut_R_NAcc   =~  BLose_v_Neut_R_NAcc_run1  + BLose_v_Neut_R_NAcc_run2
- BLose_v_Neut_R_Insula =~  BLose_v_Neut_R_Insula_run1+ BLose_v_Neut_R_Insula_run2
- BLose_v_BWin_R_NAcc   =~  BLose_v_BWin_R_NAcc_run1  + BLose_v_BWin_R_NAcc_run2
- BLose_v_BWin_R_Insula =~  BLose_v_BWin_R_Insula_run1+ BLose_v_BWin_R_Insula_run2
- 
-# Using [m-x] to impose simple equality constraints on individual runs loading onto avg run values
- AWin_v_Neut_L_NAcc    =~  AWin_v_Neut_L_NAcc_run1   + AWin_v_Neut_L_NAcc_run2
- AWin_v_Neut_L_Insula  =~  AWin_v_Neut_L_Insula_run1 + AWin_v_Neut_L_Insula_run2
- BWin_v_Neut_L_NAcc    =~  BWin_v_Neut_L_NAcc_run1   + BWin_v_Neut_L_NAcc_run2
- BWin_v_Neut_L_Insula  =~  BWin_v_Neut_L_Insula_run1 + BWin_v_Neut_L_Insula_run2
- BWin_v_BLose_L_NAcc   =~  BWin_v_BLose_L_NAcc_run1  + BWin_v_BLose_L_NAcc_run2
- BWin_v_BLose_L_Insula  =~ BWin_v_BLose_L_Insula_run1+ BWin_v_BLose_L_Insula_run2
- ALose_v_Neut_L_NAcc   =~  ALose_v_Neut_L_NAcc_run1  + ALose_v_Neut_L_NAcc_run2
- ALose_v_Neut_L_Insula =~  ALose_v_Neut_L_Insula_run1+ ALose_v_Neut_L_Insula_run2  
- BLose_v_Neut_L_NAcc   =~  BLose_v_Neut_L_NAcc_run1  + BLose_v_Neut_L_NAcc_run2
- BLose_v_Neut_L_Insula =~  BLose_v_Neut_L_Insula_run1+ BLose_v_Neut_L_Insula_run2
- BLose_v_BWin_L_NAcc   =~  BLose_v_BWin_L_NAcc_run1  + BLose_v_BWin_L_NAcc_run2
- BLose_v_BWin_L_Insula =~  BLose_v_BWin_L_Insula_run1+ BLose_v_BWin_L_Insula_run2
- 
-
-Approach =~ AWin_v_Neut_L_NAcc  + AWin_v_Neut_R_NAcc  + AWin_v_Neut_R_Insula +
-            BWin_v_Neut_L_NAcc  + BWin_v_Neut_R_NAcc  + BWin_v_Neut_R_Insula +
-            BWin_v_BLose_L_NAcc + BWin_v_BLose_R_NAcc  
-                
-Avoid =~    ALose_v_Neut_L_Insula + ALose_v_Neut_L_Insula +
-            BLose_v_Neut_L_Insula + BLose_v_Neut_R_Insula +
-            BLose_v_BWin_L_Insula + BLose_v_BWin_R_Insula 
-'
-```
-
-## *Used* CFA model 
-
-The below specified model will be used. The number of estimate parameters are fewer and may be more appropriate for the theoretical model. This model may result in few convergence issues if the number of participants ends up to be few and the coefficients/estimates are lower. 
+The below specified model will be used. The number of estimate parameters are fewer and may be more appropriate for the theoretical model. This model may result in few convergence issues if the number of participants ends up to be few and the coefficients/estimates are lower.(see Kline 2015 book on **Principles and Practice of Structural Equation Modeling**).
 
 ```{r}
 MID_model <-'
@@ -261,18 +217,10 @@ Avoid =~    ALose_v_Neut_L_Insula_run1 + ALose_v_Neut_L_Insula_run1 +
 ## Running CFA: Three Samples
 
 Below is the CFA model that is used to test the proposed restricted model (see Figure 1 in the manuscript). The CFA fitting procedure is consistent with the description [here](https://lavaan.ugent.be/tutorial/cfa.html). 
-For each CFA model, the full sample is filtered for each type sample, e.g. AHRB, MLS, ABCD. The `std.lv= = TRUE` constrain the latent factor variances to *1*. The estimator being used is `MLR`, a maximum likelihood robust estimator. In addition to a model for each sample, a CFA model is estimated for the complete data (i.e., all three datasets).
+For each CFA model, the full sample is filtered for each type sample, e.g. AHRB, MLS, ABCD. The `std.lv= = TRUE` constrain the latent factor variances to *1*. The estimator being used is `MLR`, a maximum likelihood robust estimator. A CFA model is estimated for the complete data (i.e., all three datasets).
 
 ```{r}
-# For starters, the CFA is estimated for each sample that is simulated (i.e., AHRB [1], MLS [2], ABCD [3])
-AHRB_cfa <- cfa(model = MID_model, data = subset(brain_set %>% filter(set==3)),
-                estimator = "MLR", std.lv = TRUE, meanstructure = TRUE) # fixing latent variances to 1
-MLS_cfa <- cfa(model = MID_model, data = subset(brain_set %>% filter(set==2)),
-               estimator = "MLR", std.lv = TRUE, meanstructure = TRUE)
-ABCD_cfa <- cfa(model = MID_model, data = subset(brain_set %>% filter(set==1)),
-                estimator = "MLR", std.lv = TRUE, meanstructure = TRUE)
-
-all_cfa <- cfa(model = MID_model, data = brain_set,
+all_sample <- cfa(model = MID_model, data = brain_set,
                estimator = "MLR", std.lv = TRUE, meanstructure = TRUE)
 ```
 
@@ -324,98 +272,62 @@ Once the above models are fit, the following information is pulled out and saved
   
 ```{r}
 # Below selects specific fit data as described in Maassen et al. 2019 OSF. No comparisons are made to compare models at this point.
-out <- matrix(NA, ncol = 9, nrow = 7)
+out <- matrix(NA, ncol = 9, nrow = 4)
 colnames(out) <- c("model","chisq","df","pvalue", "rmsea", "cfi", "srmr",
                    "AIC", "BIC")
 
 # save fit measures from models
-out[1,2:7] <- round(data.matrix(fitmeasures(AHRB_cfa, 
+out[1,2:7] <- round(data.matrix(fitmeasures(all_sample, 
                                             fit.measures = c("chisq","df","pvalue",
                                                              "rmsea", "cfi", "srmr"))), 
                     digits=3)
 
-out[2,2:7] <- round(data.matrix(fitmeasures(MLS_cfa, 
-                                            fit.measures = c("chisq","df","pvalue",
-                                                             "rmsea", "cfi", "srmr"))), 
-                    digits=3)
-
-out[3,2:7] <- round(data.matrix(fitmeasures(ABCD_cfa, 
-                                            fit.measures = c("chisq","df","pvalue",
-                                                             "rmsea", "cfi", "srmr"))), 
-                    digits=3)
-
-out[4,2:7] <- round(data.matrix(fitmeasures(all_cfa, 
-                                            fit.measures = c("chisq","df","pvalue",
-                                                             "rmsea", "cfi", "srmr"))), 
-                    digits=3)
-
-out[5,2:7] <- round(data.matrix(fitmeasures(configural_cfa, 
+out[2,2:7] <- round(data.matrix(fitmeasures(configural_cfa, 
                                             fit.measures = c("chisq","df","pvalue",
                                                              "rmsea", "cfi", "srmr"))), 
                             digits=3)
 
-out[6,2:7] <- round(data.matrix(fitmeasures(metric_cfa, 
+out[3,2:7] <- round(data.matrix(fitmeasures(metric_cfa, 
                                             fit.measures = c("chisq","df","pvalue",
                                                              "rmsea", "cfi", "srmr"))), 
                     digits=3)
 
 
 # AIC models
-out[1,8] <- round(AIC(AHRB_cfa),3)
-out[2,8] <- round(AIC(MLS_cfa),3)
-out[3,8] <- round(AIC(ABCD_cfa),3)
-out[4,8] <- round(AIC(all_cfa),3)
-out[5,8] <- round(AIC(configural_cfa),3)
-out[6,8] <- round(AIC(metric_cfa),3)
+out[1,8] <- round(AIC(all_sample),3)
+out[2,8] <- round(AIC(configural_cfa),3)
+out[3,8] <- round(AIC(metric_cfa),3)
 
 # BIC models
-out[1,9] <- round(BIC(AHRB_cfa),3)
-out[2,9] <- round(BIC(MLS_cfa),3)
-out[3,9] <- round(BIC(ABCD_cfa),3)
-out[4,9] <- round(BIC(all_cfa),3)
-out[5,9] <- round(BIC(configural_cfa),3)
-out[6,9] <- round(BIC(metric_cfa),3)
+out[1,9] <- round(BIC(all_sample),3)
+out[2,9] <- round(BIC(configural_cfa),3)
+out[3,9] <- round(BIC(metric_cfa),3)
 
-out[1:6,1] <-  c("AHRB CFA","MLS CFA","ABCD CFA", "Overall CFA", "Configg MG-CFA", "Metric MG-CFA")
+out[1:3,1] <-  c("Overall CFA", "Configg MG-CFA", "Metric MG-CFA")
 ```
 
 ## Model Parameter Summary
 
 Reporting standardized coefficients.
 
-### AHRB CFA model 
+### All Sample CFA model 
 
 ```{r}
-##### Summarizing CFA models #####
-parameters(AHRB_cfa, standardize = T)
-```
-
-
-### MLS CFA model 
-
-```{r}
-##### Summarizing CFA models #####
-parameters(MLS_cfa, standardize = T)
-```
-
-### ABCD CFA model 
-
-```{r}
-##### Summarizing CFA models #####
-parameters(ABCD_cfa, standardize = T)
+##### Summarizing All Samples CFA model #####
+parameters(all_sample, standardize = T)
 ```
 
 ### Configural CFA model 
 
 ```{r}
-##### Summarizing CFA models #####
+##### Summarizing Configural MG-CFA model #####
 parameters(configural_cfa, standardize = T)
 ```
 
 ### Metric CFA model 
 
 ```{r}
-##### Summarizing CFA models #####
+##### Summarizing Metric Multi-group CFA model #####
 parameters(metric_cfa, standardize = T)
 ```
 
@@ -424,7 +336,7 @@ parameters(metric_cfa, standardize = T)
 The below compares whether the complete data (across all three samples) in the `all_cfa` model is significantly improved by the configural invariance model. A significant value indicates that the configural model is significantly better than the full sample cfa.
 
 ```{r}
-anova(all_cfa, configural_cfa)
+anova(all_sample, configural_cfa)
 ```
 
 Next, anova is used to compare the model improve in AIC/BIC by between the configural and metric invariance. A significantly result in the anova would indicate a significant improvement of the metric model over the configural model.
@@ -507,8 +419,6 @@ esem_data = brain_set[,c("AWin_v_Neut_L_NAcc_run1"  ,"AWin_v_Neut_L_NAcc_run2" ,
 As described in March et al. (2014), create a target rotation for items onto factors. In this case two factors are specified by the CFA model, so factor 1 and factor 2 are specified in `make_target`.
 
 ```{r}
-# First, consistent w/ March et al. (2014), creating target rotation
-# ensure they match onto variable list 
 target_rot <- make_target(28,mainloadings = list(f1 = 1:16, f2 = 17:28))
 esem.efa <- esem_efa(data = esem_data[,1:28], nfactors = 2,
                      target = target_rot, fm = "ml")
@@ -552,37 +462,54 @@ esem_mid_fit<- cfa(esem_mid_model, esem_data[,1:28], std.lv=TRUE, meanstructure 
 Pull and add fit statistics to the `out` dataframe and print results to see decreases in AIC/BIC
 ```{r}
 # adding values to the CFA model fit indices
-out[7,2:7] <- round(data.matrix(fitmeasures(esem_mid_fit, 
+out[4,2:7] <- round(data.matrix(fitmeasures(esem_mid_fit, 
                                             fit.measures = c("chisq","df","pvalue",
                                                              "rmsea", "cfi", "srmr"))), 
                     digits=3)
-out[7,8] <- round(AIC(esem_mid_fit),3)
-out[7,9] <- round(BIC(esem_mid_fit),3)
-out[7,1] <-  c("Overall ESEM")
+out[4,8] <- round(AIC(esem_mid_fit),3)
+out[4,9] <- round(BIC(esem_mid_fit),3)
+out[4,1] <-  c("Overall ESEM")
 
 out <- as.data.frame(out)
 
 out %>% 
   knitr::kable(
     col.names = c("Model", "Chi-sq", "DF", "p value", "RMSEA", "CFI", "SRMR", "AIC", "BIC"),
-    caption = "Fit statistics from CFA and ESEM models",
+    caption = "Fit statistics from MG-CFA and ESEM models",
     booktabs = TRUE
     )
 ```
 
 
-# Running EFA [Unrestricted] model {.tabset}
+# Aim: 2. Running EFA [Unrestricted] model {.tabset}
 
 Here, a data-driven exploratory factor analysis is performed as implemented using the (https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/factanal)[https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/factanal] in the stats package. The same variables as in the CFA and ESEM dataset are used. A tutorial from Nilam Ram on EFA is also available [here](https://quantdev.ssri.psu.edu/tutorials/intro-basic-exploratory-factor-analysis) 
 
 ## Rec. # Factors
 
-Taking a simple scree plot approach using the [nFactors](https://cran.r-project.org/web/packages/nFactors/nFactors.pdf) package see the recommended factors for the EFA model.
+A number of methods can be used to estimate the recommended data driven factors in the data. There are nuanced differences in calculations between packages and methods. Therefore, a number of packages are used to acquire consistent evidence to acquire the most parsimonious model.
+
+Using [nFactors](https://cran.r-project.org/web/packages/nFactors/nFactors.pdf) package see the recommended factors for the EFA model using a number of models.
 
 ```{r}
 fa_data <- subset(esem_data[,1:28])
 par(mfrow=c(1,1))
 fa.parallel(fa_data) # https://cran.r-project.org/web/packages/nFactors/nFactors.pdf
+```
+
+```{r}
+plot(nScree(x=esem_data[,1:28],model="factors"))
+
+```
+
+To avoid biasing of packages in different calculations of recommendation factors that depend on strong correlations between bilateral regions by using [parallel analysis](www.doi.org/10.1080/00273170902938969). Parallel analysis is also implemented using the [paran package](https://CRAN.R-project.org/package=paran). 
+
+```{r}
+paran(x = esem_data[,1:28],
+      iterations = 1000, quietly = FALSE, centile = 95, 
+      status = FALSE, all = TRUE, cfa = TRUE, graph = TRUE, color = TRUE, 
+      col = c("black", "red", "blue"), lty = c(1, 2, 3), lwd = 1, legend = TRUE, 
+      seed = 100)
 ```
 
 
@@ -612,93 +539,13 @@ bic_fact %>%
   geom_vline(xintercept = bic_fact$Nfactors[lowest_bic], colour = 'red')+
   theme_minimal()
 ```
-Complementing the simple scree pot and BIC to avoid biasing of recommendation factors that depend on strong correlations between bilateral regions by using [parallel analysis](www.doi.org/10.1080/00273170902938969). Parallel analysis is implemented using the [paran package](https://CRAN.R-project.org/package=paran). Converging information is used to identify the optimal factors. 
 
-```{r}
-paran(x = esem_data[,1:28],
-      iterations = 1000, quietly = FALSE, centile = 95, 
-      status = FALSE, all = TRUE, cfa = TRUE, graph = TRUE, color = TRUE, 
-      col = c("black", "red", "blue"), lty = c(1, 2, 3), lwd = 1, legend = TRUE, 
-      seed = 100)
-```
 
-```{r}
-plot(nScree(x=esem_data[,1:28],model="factors"))
-
-```
-
-## Run EFA on all data
+## By Sample EFA
 
 Used the (factanal)[https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/factanal] to run EFA model. Specifying the number of factors and using the `promax` (non-orthogonal) rotation.
-```{r}
-MID_efa <- factanal(x = esem_data[,1:28],  #raw data  
-              factors = 2, rotation = "promax" # oblique rotation allow for non-orthogonal structure
-              )
-```
 
-
-## Plot EFA, Dimensions
-
-Plot the loadings across the dimensions as represented in the affective circumplex framework.
-
-```{r}
-factor.plot(ic.results = MID_efa$loadings, 
-            labels = colnames(fa_data), 
-            cex = .6, jiggle = FALSE,
-            ylim = c(-1,1), xlim = c(-1,1),
-            title = "Mutldimensional Plot of FA1 v FA2 Loadings"
-            )
-```
-
-
-## Plot Factors Alt.
-
-Plot factor loadings with respect to other factors.
-
-```{r}
-pairs(MID_efa$loadings, col=1:ncol(fa_data), upper.panel=NULL, main="Factor loadings")
-par(xpd=TRUE) 
-legend('topright', bty='n', pch='o', 
-       col=1:ncol(fa_data), ncol = 3,
-       attr(MID_efa$loadings, 'dimnames')[[1]], 
-       title="Contrasts", 
-       cex = .4)
-```
-
-## Heatmap of factor loadings
-
-Create a heatmap of loadings onto the provided factors.
-```{r echo=TRUE, message=FALSE, warning=FALSE}
-heatmaply(round(MID_efa$loadings[,1:2],2) %>% print(sort = T),
-          scale_fill_gradient_fun = ggplot2::scale_fill_gradient2(
-                 low = "blue", 
-                 high = "darkred", 
-                 space = "Lab",
-                 midpoint = 0, 
-                 limits = c(-1, 1)
-               ),
-               dendrogram = "none",
-               xlab = "", ylab = "", 
-               main = "",
-               margins = c(60,100,40,20),
-               grid_color = "white",
-               grid_width = 0.00001,
-               titleX = FALSE,
-               hide_colorbar = FALSE,
-               branches_lwd = 0.1,
-               label_names = c("Brain:", "Feature:", "Value"),
-               fontsize_row = 9, fontsize_col = 9,
-               labCol = colnames(MID_efa$loadings[,1:2]),
-               labRow = rownames(MID_efa$loadings[,1:2]),
-               heatmap_layers = theme(axis.line=element_blank()),
-          
-)
-
-```
-
-### Run EFA on sample specific
-
-#### EFA ABCD
+### Sample: *ABCD*
 ```{r}
 abcd_efadata = subset(esem_data %>% filter(set==1))
 
@@ -735,7 +582,7 @@ heatmaply(round(abcd_efa$loadings[,1:2],2) %>% print(sort = T),
 ```
 
 
-#### EFA MLS
+### Sample: *MLS*
 ```{r}
 mls_efadata = subset(esem_data %>% filter(set==2))
 
@@ -771,7 +618,7 @@ heatmaply(round(mls_efa$loadings[,1:2],2) %>% print(sort = T),
 )
 ```
 
-#### EFA AHRB
+### Sample: *AHRB*
 ```{r}
 ahrb_efadata = subset(esem_data %>% filter(set==3))
 
@@ -808,7 +655,7 @@ heatmaply(round(ahrb_efa$loadings[,1:2],2) %>% print(sort = T),
 ```
 
 
-## Comparing EFA models
+## Quant. Convergence
 
 Calculating a coefficient of factor congruence across the three sample's EFA models. Using function [fa.congruence](https://search.r-project.org/CRAN/refmans/psych/html/factor.congruence.html)
 
