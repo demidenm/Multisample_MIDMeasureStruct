@@ -132,7 +132,7 @@ def glm_report(model, contrasts, out_dir, alpha=.05):
 
 # Setting data (for events.tsv) and derivative (for fmriprep) paths
 data_path = '/Users/michaeldemidenko/sherlock/data/AHRB'
-deriv_path = '/Users/michaeldemidenko/Desktop/Academia/Stanford/2_F32/Data/Pilot_N1/derivatives/fmri_prep'
+deriv_path = './Pilot_N3/derivatives/fmri_prep'
 firstlvl_output = f'{deriv_path}/firstlvl_out/contrast_files'
 
 # Creating list of subjects and runs to loop over
