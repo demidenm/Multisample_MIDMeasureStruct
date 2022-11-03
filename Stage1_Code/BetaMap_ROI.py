@@ -5,7 +5,7 @@ from nilearn.masking import apply_mask
 
 
 # Set input and output paths
-data_dir = '/Users/michaeldemidenko/Desktop/Academia/Stanford/2_F32/Data/Pilot_N1'
+data_dir = './Pilot_N3'
 ROIs_dir = f'{data_dir}/ROIs'
 fmri_prep = f'{data_dir}/derivatives/fmri_prep'
 fstlvl_dir = f'{data_dir}/derivatives/fmri_prep/firstlvl_out/contrast_files'
