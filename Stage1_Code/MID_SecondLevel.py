@@ -86,7 +86,7 @@ def group_onesample(fixed_files,group_out,contrast,smoothing=None):
 
 
 # Set paths
-data_dir = '/Users/michaeldemidenko/Desktop/Academia/Stanford/2_F32/Data/Pilot_N1'
+data_dir = './Pilot_N3'
 in_dir = f'{data_dir}/derivatives/fmri_prep/firstlvl_out/contrast_files'
 fix_dir = f'{data_dir}/derivatives/fmri_prep/secondlevel/fixed'
 
