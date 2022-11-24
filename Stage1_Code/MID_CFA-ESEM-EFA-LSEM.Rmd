@@ -3,6 +3,9 @@ title: "MID - Measurement Model Code"
 author: "<h3>by Michael Demidenko</h3>"
 date: "`r format(Sys.time(), '%B %Y')`"
 output:
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
   html_document:
     theme: united
     highlight: tango
@@ -14,9 +17,6 @@ output:
       smooth_scroll: yes
     code_folding: hide
     self_contained: yes
-  pdf_document:
-    toc: yes
-    toc_depth: '2'
 tags: []
 subtitle: <h2><u></u></h2>
 ---
@@ -51,7 +51,7 @@ pacman::p_load(simsem, plyr, tidyverse,ggdist, ggplot2, ggpubr, tidyquant, corrp
 This section is unique only to the Stage 1 registered reported. We are not using any real data, so to ensure that each step is completed correctly, we use simulated data. We can operate under the assumption that all participants will have no missing values given how exclusion criteria are applied and fMRI data are extracted from the BOLD timeseries.
  
 
-In this section, a population model is fit reflecting the theoretical phenomenon that are involved in the reward processing construct. The idea is that there are approach and avoidance (measured constructs) characteristics that are associated with stimuli within/across tasks (Manifest variables). There is no `ground truth` of these processes at the individual. Nevertheless, the variables are important to the broad construct of approach and avoidance that are sub-constructs of the higher-order reward processing construct. In the MID task these constructs are hypothesized to reflect the the multidimensional affective circumplex model. As formalized here, in the MID task the contrasts reflect the manifest variables (i.e., reflective model) as opposed of the other way, whereby the items form the variables predict the construct (i.e., formative model).
+In this section, a population model is fit reflecting the approach and avoidance (measured constructs) that are [presumed] to be associated with stimuli within/across tasks (Manifest variables). As formalized here, in the MID task the contrasts reflect the manifest variables (i.e., reflective model) as opposed of the other way, whereby the items form the variables predict the construct (i.e., formative model).
 
 ## Specify Population Model
 
