@@ -519,11 +519,51 @@ lsem.permuted <- sirt::lsem.permutationTest(lsem.object = lsem.MID,
                                             residualize = FALSE) 
 summary(lsem.permuted) # examine results
 
+## Supplement LSEM: Sex MGCFA
+set.seed(110)
+sim_ABCD_data$Sex <- as.integer(rbinom(n = 1000, size = 1, prob = .57)) 
+
+sim_ABCD_data$Sex_r <- if_else(sim_ABCD_data$Sex == 0, "Male","Female")
+
+
+sex_cfa <- cfa(model = MID_model, data = sim_ABCD_data, group = 'Sex_r', 
+               estimator = "MLR", std.lv = TRUE, meanstructure = TRUE)
+
+layout(t(1:2))
+semPaths(sex_cfa,
+         color = "lightyellow",
+         theme="colorblind",
+         whatLabels = "std",
+         style = "lisrel",
+         sizeLat = 10,
+         sizeLat2 = 10,
+         sizeMan = 6,
+         edge.color = "steelblue",
+         edge.label.cex = 2,
+         label.cex = 2,
+         rotation = 2,
+         layout = "tree2",
+         intercepts = TRUE,
+         residuals = FALSE,
+         #residScale = 10,
+         curve = 2,
+         title = T,
+         title.color = "black",
+         cardinal = "lat cov",
+         curvePivot = T,
+         nCharNodes = 6,
+         #nodeLabels = label,
+         mar = c(2,5,2,6))
+# Title 
+title("Multi-group CFA (Male/Female) across MID Contrasts")
+
+
+
 # Sensitivity Analyses 
 
 ## UM Specific CFA/ESEM/EFA
 
-ABCD_site_spec <- sim_ABCD_data %>% filter(PDS == 3)
+ABCD_site_spec <- subset(sim_ABCD_data[,1:50]) %>% filter(PDS == 3)
 
 sim_AHRB_data$PDS <- NA
 sim_MLS_data$PDS <- NA

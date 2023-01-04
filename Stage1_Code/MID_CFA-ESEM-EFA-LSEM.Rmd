@@ -6,6 +6,7 @@ output:
   pdf_document:
     toc: yes
     toc_depth: '2'
+    latex_engine: xelatex
   html_document:
     theme: united
     highlight: tango
@@ -811,6 +812,63 @@ lsem.permuted <- sirt::lsem.permutationTest(lsem.object = lsem.MID,
 summary(lsem.permuted) # examine results
 ```
 
+## Supplement LSEM: Sex MGCFA
+
+Randomly creating sex at birth variable. Running Multigroup CFA on this variable. In future [real data] implementation, will apply the EFA CFA from n = 1000 ABCD sample in the held out n = 1000 ABCD sample. Piloting on the simulated sex variable here.
+
+```{r message=FALSE, warning=FALSE}
+#first adding random PDS variable
+set.seed(110)
+sim_ABCD_data$Sex <- as.integer(rbinom(n = 1000, size = 1, prob = .57)) 
+
+sim_ABCD_data$Sex_r <- if_else(sim_ABCD_data$Sex == 0, "Male","Female")
+
+
+sex_cfa <- cfa(model = MID_model, data = sim_ABCD_data, group = 'Sex_r', 
+                      estimator = "MLR", std.lv = TRUE, meanstructure = TRUE)
+
+
+```
+
+
+MGCFA results by sex at birth
+
+```{r}
+
+layout(t(1:2))
+semPaths(sex_cfa,
+         color = "lightyellow",
+         theme="colorblind",
+         whatLabels = "std",
+         style = "lisrel",
+         sizeLat = 10,
+         sizeLat2 = 10,
+         sizeMan = 6,
+         edge.color = "steelblue",
+         edge.label.cex = 2,
+         label.cex = 2,
+         rotation = 2,
+         layout = "tree2",
+         intercepts = TRUE,
+         residuals = FALSE,
+         #residScale = 10,
+         curve = 2,
+         title = T,
+         title.color = "black",
+         cardinal = "lat cov",
+         curvePivot = T,
+         nCharNodes = 6,
+         #nodeLabels = label,
+         mar = c(2,5,2,6))
+# Title 
+title("Multi-group CFA (Male/Female) across MID Contrasts")
+
+```
+
+Standardized Parameters in Table
+```{r}
+parameters(sex_cfa, standardize = T)
+```
 
 
 # Sensitivity Analyses {.tabset}
@@ -825,7 +883,7 @@ In the manuscript, several sensitivity analyses are proposed:
 
 In the chunk below, the PDS simulated data will be used as the filter, assuming that PDS 3 are the values reflecting the site of interest.
 ```{r}
-ABCD_site_spec <- sim_ABCD_data %>% filter(PDS == 3)
+ABCD_site_spec <- subset(sim_ABCD_data[,1:50]) %>% filter(PDS == 3)
 
 sim_AHRB_data$PDS <- NA
 sim_MLS_data$PDS <- NA
