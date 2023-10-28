@@ -1,0 +1,45 @@
+#!/bin/bash
+#
+#SBATCH --job-name=MLS_fMRIPrep #_word
+#SBATCH --array=65 #1-250%14 # run job array
+#SBATCH --time=05:00:00
+#SBATCH --cpus-per-task=12
+#SBATCH --mem-per-cpu=8GB
+#SBATCH -p ${PROFILE}
+# Outputs ----------------------------------
+#SBATCH --output=fmriprep_log/%x-%A_%a.out
+#SBATCH --error=fmriprep_log/%x-%A_%a.err
+#SBATCH --mail-user=${USER}@stanford.edu
+#SBATCH --mail-type=ALL
+# ------------------------------------------
+
+# Define directories
+
+DATA_DIR=/oak/../MLS
+DATA_OUT=${DATA_DIR}/derivatives/fmriprep_23.1.0
+SCRATCH=/scratch/../MLS
+SIMG_DIR=/home/../singularity_images
+
+# FS license
+FS_LICENSE=/home/users/${USER}/fs/license.txt
+
+# sub set/fmriprep command
+
+# example from job array, subj=("21" "31" "78" "55" "106")
+subj=$( printf %02d ${SLURM_ARRAY_TASK_ID} )
+echo "SUBJECT_ID: " $subj
+
+singularity run --cleanenv \
+        -B ${DATA_DIR}:/data:ro -B ${DATA_OUT}:/out \
+        ${SIMG_DIR}/fmriprep-23.1.0.simg \
+        /data /out participant \
+        --skip_bids_validation \
+        --participant-label sub-${subj} \
+        -t reward \
+        --fs-license-file ${FS_LICENSE} \
+        --fd-spike-threshold .9 \
+        --output-space MNI152NLin2009cAsym:res-2 fsnative \
+        --project-goodvoxels \
+        --cifti-output 91k \
+        -vv \
+        -w ${SCRATCH}

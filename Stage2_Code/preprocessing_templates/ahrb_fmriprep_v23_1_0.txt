@@ -1,0 +1,48 @@
+#!/bin/bash
+#
+#SBATCH --job-name=AHRB_FP
+#SBATCH --array=1-108%14 # run job array, test sync-sdc w/ force
+#SBATCH --time=6:00:00
+#SBATCH --cpus-per-task=12
+#SBATCH --mem-per-cpu=8GB
+#SBATCH -p ${PROFILE}
+# Outputs ----------------------------------
+#SBATCH --output=fmriprep_log/ahrb_fmriprep.%A_%a.out
+#SBATCH --error=fmriprep_log/ahrb_fmriprep.%A_%a.err
+#SBATCH --mail-user=${USER}@stanford.edu
+#SBATCH --mail-type=ALL
+# ------------------------------------------
+
+# Define directories
+
+DATA_DIR=/oak/../AHRB
+DATA_OUT=/oak/../AHRB/derivatives/fmriprep_23.1.0
+SCRATCH=/scratch/../AHRB
+SIMG_DIR=/home/../singularity_images
+
+# FS license
+FS_LICENSE=/home/users/${USER}/fs/license.txt
+
+# sub set/fmriprep command
+
+# example from job array, subj=("21" "31" "78" "55" "106")
+subj=$( printf %02d ${SLURM_ARRAY_TASK_ID} )
+echo "SUBJECT_ID: " $subj
+
+singularity run --cleanenv \
+        -B ${DATA_DIR}:/data:ro -B ${DATA_OUT}:/out \
+        ${SIMG_DIR}/fmriprep-23.1.0.simg \
+        /data /out participant \
+        --participant-label sub-${subj} \
+        -t mid \
+        --ignore slicetiming \
+        --fs-license-file ${FS_LICENSE} \
+        --fd-spike-threshold .9 \
+        --use-syn-sdc \
+        --force-syn \
+        --output-space MNI152NLin2009cAsym:res-2 fsnative \
+        --project-goodvoxels \
+        --cifti-output 91k \
+        --resource-monitor \
+        -vv \
+        -w ${SCRATCH}

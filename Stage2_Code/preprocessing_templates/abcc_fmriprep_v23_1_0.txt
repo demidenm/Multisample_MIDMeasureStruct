@@ -1,0 +1,164 @@
+#!/bin/bash
+
+# subj variables, input/output/run paths, singularity info
+fmriprep_ver=FMRIPREP
+subj_id=SUBJECTID
+ses_id=SESID
+task=MID,SST,nback,rest
+data_dir=DATADIR
+data_input=INPUT
+data_bucket=BUCKET
+run_dir=RUNDIR
+log_num=LOGNUM
+singularity=`which singularity`
+sif_img=/home/../fmriprep/fmriprep_23.1.0.sif
+FS_L=${run_dir}/license.txt
+fplog_dir=${run_dir}/fp_logs
+compdate=$(date)
+completed_file=${run_dir}/${ses_id}_completed.tsv
+failed_file=${run_dir}/${ses_id}_failed.tsv
+
+# Check if completed/failed_file exists, if not create it
+if [ ! -f "$completed_file" ]; then
+    touch "$completed_file"
+    echo "Created $completed_file"
+else
+    echo "$completed_file already exists"
+fi
+
+if [ ! -f "$failed_file" ]; then
+    touch "$failed_file"
+    echo "Created $failed_file"
+else
+    echo "$failed_file already exists"
+fi
+
+
+# pull down needed data and files from BIDS bucket
+if [ ! -d 
+${data_dir}/bids_dir/sub-${subj_id}_ses-${ses_id}/sub-${subj_id}/ses-${ses_id} 
+]; then
+        mkdir -p 
+${data_dir}/bids_dir/sub-${subj_id}_ses-${ses_id}/sub-${subj_id}/ses-${ses_id}
+        cp -r ${data_input}/sub-${subj_id}/ses-${ses_id} 
+${data_dir}/bids_dir/sub-${subj_id}_ses-${ses_id}/sub-${subj_id}/
+
+fi
+
+# Clean  to avoid errors, e.g. remove bval/bvec from wrong folder
+fmap_path=${data_dir}/bids_dir/sub-${subj_id}_ses-${ses_id}/sub-${subj_id}/ses-${ses_id}/fmap
+rm ${fmap_path}/*acq-dwi_dir*
+rm ${fmap_path}/*acq-func_dir-both_*
+rm -r 
+${data_dir}/bids_dir/sub-${subj_id}_ses-${ses_id}/sub-${subj_id}/ses-${ses_id}/dwi/
+
+# to avoid intended for error, remove TWO edge case errors
+# 1: this is NOT to delete fmaps but cases where non run e.g 
+*AP_run-01_ep.json* exist and there are >1 (should not occur)
+count=$(find ${fmap_path} -type f -name 
+"sub-${subj_id}_ses-${ses_id}_acq-func_dir-AP_*epi.json" | wc -l)
+if [ $count -gt 1 ]; then
+        rm ${fmap_path}/sub-${subj_id}_ses-${ses_id}_acq-func_dir-AP_epi.*
+        rm ${fmap_path}/sub-${subj_id}_ses-${ses_id}_acq-func_dir-PA_epi.*
+fi
+
+# 2: fmriprep expects a single run = IntendedFor AP/PA mapping. So errors 
+where multiple AP/PA for runs. Here, selecting first instance.
+for file in `ls ${fmap_path}/*.json` ; do 
+#       values=$(jq '.IntendedFor | length' "$file")
+        values=$(jq 'if has("IntendedFor") then .IntendedFor | length else 
+0 end' "$file")
+        filename=$(basename ${file} .json )
+        if [ "$values" -gt 0 ]; then
+                echo -e "STOPPING AT: ${file} \n\t IntendedFor Length: 
+${values}"
+                break
+        fi
+done
+keep_pattern=${filename/AP/*} # adjust to replace AP with wildcard, so 
+AP/PA are kept
+find ${fmap_path} -type f ! -name "${keep_pattern}.*" -exec rm {} \;
+
+# create folders
+if [ ! -e 
+${data_dir}/bids_dir/sub-${subj_id}_ses-${ses_id}/dataset_description.json 
+]; then
+        cp ${run_dir}/dataset_description.json 
+${data_dir}/bids_dir/sub-${subj_id}_ses-${ses_id}/
+fi
+
+# create FMRIPREP scratch output and workdirs
+if [ ! -d 
+${data_dir}/processed/${fmriprep_ver}/sub-${subj_id}_ses-${ses_id} ]; then
+        mkdir -p 
+${data_dir}/processed/${fmriprep_ver}/sub-${subj_id}_ses-${ses_id}
+fi
+
+if [ ! -d 
+${data_dir}/work_dir/${fmriprep_ver}/sub-${subj_id}_ses-${ses_id} ]; then
+        mkdir -p 
+${data_dir}/work_dir/${fmriprep_ver}/sub-${subj_id}_ses-${ses_id}
+
+else
+        find 
+${data_dir}/work_dir/${fmriprep_ver}/sub-${subj_id}_ses-${ses_id} -name 
+"*IsRunning*" -delete
+
+fi
+
+
+# run FMRIPREP pipeline
+singularity run --cleanenv \
+-B ${data_dir}/bids_dir/sub-${subj_id}_ses-${ses_id}:/bids_dir \
+-B 
+${data_dir}/processed/${fmriprep_ver}/sub-${subj_id}_ses-${ses_id}:/output_dir 
+\
+-B ${data_dir}/work_dir/${fmriprep_ver}/sub-${subj_id}_ses-${ses_id}:/wd \
+${sif_img} \
+/bids_dir /output_dir participant \
+--participant-label ${subj_id} \
+--fs-license-file ${FS_L} \
+--bids-filter-file ${run_dir}/task_list.json \
+--ignore slicetiming \
+--fd-spike-threshold .9 \
+--output-space MNI152NLin2009cAsym:res-2 fsnative \
+--project-goodvoxels \
+--cifti-output 91k \
+-vv \
+-w /wd
+
+for log in ${log_num} ; do
+        comp=$(cat ${fplog_dir}/*_${log}.out | grep "fMRIPrep finished 
+successfully" | sed -e 's/^[[:space:]]*//' -e 's/[[:punct:]]//g' )
+
+        fMRIprep_error_msg=$(cat ${fplog_dir}/*_${log}.err | grep 'Error' 
+| tr -d '\n\t')
+
+        if [ -z "$fMRIprep_error_msg" ]; then
+                fMRIprep_error_msg=$(cat ${fplog_dir}/*_${log}.out | grep 
+'Error' | tr -d '\n\t')
+        fi
+
+        if [ "${comp}" == "fMRIPrep finished successfully" ]; then
+                echo -e 
+"${subj_id}\t${ses_id}\t${task}\t*_${log}.out\t${compdate}\t${fMRIprep_error_msg}" 
+>> ${completed_file}
+        else
+                echo -e 
+"${subj_id}\t${ses_id}\t${task}\t*_${log}.err\t${compdate}\t${fMRIprep_error_msg}" 
+>> ${failed_file}
+        fi
+done
+
+#push processed outputs to bucket
+s3cmd sync -F --recursive -v 
+${data_dir}/processed/${fmriprep_ver}/sub-${subj_id}_ses-${ses_id}/ 
+${data_bucket}/derivatives/${fmriprep_ver}/ses-${ses_id}/
+
+# run filemapper
+
+# delete folders in temp
+rm -r ${data_dir}/bids_dir/sub-${subj_id}_ses-${ses_id}
+rm -r ${data_dir}/work_dir/${fmriprep_ver}/sub-${subj_id}_ses-${ses_id}/
+
+echo "Deleted bids_dir and work_dir in ${data_dir}"

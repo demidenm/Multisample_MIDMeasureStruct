@@ -1,0 +1,11 @@
+When running first level, run FirstLevel.sh first
+Make sure FirstLevel.py and FixedEffect.py ses = ses-1
+
+Then run FirstLevel_2.sh
+Make sure FirstLevel.py and FixedEffet.py  ses = ses-2
+
+
+This is because some subjects did not have initial reward task until a later session.
+MLS treated these subjects as the ses-1. So following their standard here.
+They have 2+ waves of data, here we use only 2 but adopt this practice per
+advice from Mary Soules from Dr Mary Heitzeg's lab.
