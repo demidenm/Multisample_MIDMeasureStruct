@@ -4,7 +4,7 @@ import json
 
 # List of subjects and sessions
 
-deriv_dir="/oak/stanford/groups/russpold/data/AHRB/derivatives"
+deriv_dir="/oak/../AHRB/derivatives"
 fp_dir = f'{deriv_dir}/fmriprep_23.1.0'
 task = 'mid'
 
