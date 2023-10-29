@@ -1,8 +1,8 @@
 [![Funded By](https://img.shields.io/badge/NIDA-F32%20DA055334--01A1-yellowgreen?style=plastic)](https://reporter.nih.gov/project-details/10525501)
 [![RegReport](https://img.shields.io/badge/Stage_1-Registered_Report-red
-)](https://osf.io/p3g4v)
+)](https://osf.io/a6t8k)
 [![DOI](https://img.shields.io/badge/DOI-Publication-blue
-)](https://osf.io/p3g4v)
+)](https://osf.io/a6t8k)
 
 # Multisample_MIDMeasureStruct
 Project  Title: 
@@ -17,7 +17,7 @@ Project Authors:
  
  
 This github repository contains the Python (.py) and R scripts (.rmd/.html) that are associated with the project. \
-This project is being submitted as a Registered Report. As described by the [OSF](https://osf.io/rr/), there are two stages to the \
+This project is being submitted as a Registered Report. As described by the [OSF](https://osf.io/a6t8k), there are two stages to the \
 registered report. Stage 1 is the submission and review of introduction, methods and proposed analyses for the publication.\
 The Stage 2 is the completion of the analyses (as proposed), results and discussion section.
 
