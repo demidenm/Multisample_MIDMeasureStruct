@@ -46,6 +46,10 @@ Stage 2 contains the final analysis code for the fMRI and Measurement model. In 
          2. .sh files: FirstLevel, Group, Group_runs, roi_batch
    2. config
 4. preprocessng templates
+5. r_code: Includes .rmd and rendered .html files
+   1. ABCD_AggregateNDA: Selecting ABCD variables/data from the downloaded repository
+   2. ABCD_DataDescriptives: Sample selection, exclusion and behavioral summaries.
+   3. ABCD_Analysis_CFA-ESEM-EFA-LSEM: demographic and correlation of data, analyses and results for CFA, ESEM, EFA and LSEM models, posthoc analyses, sample specific covariance matrices, means and SDs.
 
 First, the AHRB and MLS analyses are run on Stanford University's Sherlock high-performance computers (HPC) and the ABCD data are run on the \
 the University of Minnesota's MSI HPCs. Briefly, each folder (AHRB, MLS and ABCD) has a template script used to run the `fmriprep v23.1.0` preprocessing. \

@@ -1,0 +1,754 @@
+---
+title: "DCN - Stage2 Analyses"
+author: "<h3>by Michael Demidenko</h3>"
+date: "`r format(Sys.time(), '%B %Y')`"
+output:
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    number_sections: yes
+    toc_depth: 2
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+    code_folding: hide
+    self_contained: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+tags: []
+subtitle: <h2><u>Subsampling, Data Descriptives & Summaries</u></h2>
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse,corrplot, reshape2, data.table,ggplot2, knitr, kableExtra, patchwork)
+
+session_info = sessionInfo()
+
+pal<- c("#1D91C0","#67001F","#CB181D","#78C679","#F46D43","#F7FCFD",
+                 "#A6CEE3","#FD8D3C","#A6D854","#D4B9DA","#6A51A3",
+                 "#7F0000","#D9D9D9","#FFF7BC","#000000","#F0F0F0",
+                 "#C7EAE5","#003C30","#F16913","#FFF7FB","#8C6BB1",
+                 "#C7E9B4","#762A83","#FC9272","#DF65B0","#EF3B2C",
+                 "#74C476","#E5F5F9","#AE017E","#F7F7F7")
+```
+
+# Project Description
+
+This project is based on the Stage 1 registered report submitted at Developmental Cognitive Neuroscience (Demidenko et al [2022](https://osf.io/a6t8k)). The proposal was to use a sub-sample of the full yr 2 (follow-up to baseline) ABCD sample. This includes 1000 participants for the initial analysis and a held out 1000 participants for the follow-up LSEM/EFA model. The below is the exclusion and descriptive statistics for the samples.
+
+This html document and .rmd was last ran using the platform: `r session_info$R.version$platform` version: `r `session_info$session_info$R.version$version.string` on `r format(Sys.time(), '%B %Y')` by Michael Demidenko.
+
+
+# ABCD Subsampling {.tabset}
+
+Consistent with the registered report, we first subsample 1000 x 2 ABCD data on which QC is performed to arrived at the final sample. The complete list of ABCD NDA subjects are gathered, then for subsampling, the base R row subsetting method is used, see [subseting](https://www.statmethods.net/management/subset.html). 
+
+## Loading data
+
+For instance, take the dataframe `NDAyr2_dat` and use row/column subsetting the df using R's column/row [indexing](https://sparkbyexamples.com/r-programming/select-rows-by-index-in-r/). Here, `df[df1 var %in% df2 var,]` takes all of the rows that are in the 2nd field with all of the columns. Below the same is used but `!` is used to specify for those not in the list/df, e.g. `df[!df1 var %in% df2 var,]`. When df1 variable is not in df2 var, take rows/columns
+
+```{r echo=TRUE}
+# Load subjects who have yr 2 folders
+ABCC_yr2_subs = read_csv("../../../Data/ABCD/ABCC_MSI/ABCC_subjectsWyr2.csv",show_col_types = F)
+
+# Load NDA yr dat
+NDA_yr2_dat = read_csv("../output/NDA_MID_QC_20230723.csv",show_col_types = F)
+
+
+# create same var name
+ABCC_yr2_subs$subjectkey <- str_replace(ABCC_yr2_subs$ABCC_yr2_ids, "sub-NDAR", "NDAR_")
+
+# select subs that match between NDA and ABCC
+subset_MIDdat = NDA_yr2_dat[NDA_yr2_dat$subjectkey %in% ABCC_yr2_subs$subjectkey,]
+
+```
+
+## Describe NDA Yr2
+As specified in the registered report, a random subsample ~1000 ABCD subjects or selected from the NDA full sampel data. Here, randomly subsample across sites to avoid variability between sites (described in the manuscript). The figure displays the distribution of the subjects across sites from the NDA data across sites. The year two sample from NDA archive is: `r nrow(NDA_yr2_dat)` subjects.
+
+
+```{r echo=TRUE}
+NDA_yr2_dat %>% 
+  dplyr::group_by(site_id_l) %>% 
+  dplyr::summarize(Sites = n()) %>%
+  ungroup() %>% 
+  ggplot(aes(x = site_id_l, y = Sites, fill = site_id_l)) +
+  geom_bar(stat="identity", colour = "black", size = .1) +
+  xlab("Site Number") +
+  ylab("Subj Count (n) per Site") +
+  scale_fill_manual(values = pal) +
+  coord_flip() +
+  theme_minimal()
+```
+
+## Sample primary, heldout + UM
+
+Generating first, second and Uni of Michigan only datasets.
+
+  - First_1000 : Random subsample on which CFA, ESEM and CFA model is test
+  - Second_1000 : Random [held out] subsample on which EFA model is evaluated using CFA and LSEM is performed.
+  - UM_only : participants only from the University of Michigan (UM), site = 13.
+
+A seed is specified using [set.seed](http://rfunction.com/archives/62) so results are reproducible (random selection is baised by seed) and subjects are not misattributed to groups as a result of varying seeds. Site 22 is excluded as this site is no longer a site after baseline. The subjects are grouped by site and a random number of 48 subjects from each site are selected. N = 48 was selected as a way to achieve 1000 subjects. Note, this results in more subjects than 1000, as 48 x 21 = `r 48*21` This is preferred to ensure equal sampling.
+
+First, the first_1000 is generated, data.frame = `First_1000`. Then, subsample second set of 1000 subjects. So the same subjects are not in both, ensure the subjects in `First_1000` are not in the second subsamle using a [not in formula]. The same method is used to subsample `Second_1000` as described for `First_1000`. 
+
+In addition, also select the University of Michigan *only* sample by subsetting based site==13 in `site_id_l` as this is used in our site-specific sensitivity check (recall, MLS and AHRB sample were collected on GE scanners at the Unversity of Michigan MRI facilities)
+
+```{r echo=TRUE}
+set.seed(1000)
+First_1000 = subset_MIDdat %>% filter(site_id_l != "site22") %>% group_by(site_id_l) %>% slice_sample(n = 48)
+First_1000$subsample = "First_1k"
+First_1000$subject = First_1000$subjectkey %>% gsub("_","",.)
+
+Second_1000 = subset_MIDdat[!subset_MIDdat$subjectkey %in% First_1000$subjectkey,] %>% filter(site_id_l != "site22") %>% group_by(site_id_l) %>% slice_sample(n = 48)
+Second_1000$subsample = "Second_1k"
+Second_1000$subject = Second_1000$subjectkey %>% gsub("_","",.)
+
+ABCD_UMonly = subset_MIDdat %>% filter(site_id_l == "site13")
+ABCD_UMonly$subsample = "UM_only"
+ABCD_UMonly$subject = ABCD_UMonly$subjectkey %>% gsub("_","",.)
+```
+
+
+## Describe samples
+Below we ensure that the above resulted in an equal number of subjects across site. 
+
+```{r echo=TRUE}
+First_1000 %>% 
+  dplyr::group_by(site_id_l) %>% 
+  dplyr::summarize(n())
+
+First_1000 %>% 
+  dplyr::group_by(site_id_l) %>% 
+  dplyr::summarize(Sites = n()) %>%
+  ungroup() %>% 
+  ggplot(aes(x = site_id_l, y = Sites, fill = site_id_l)) +
+  geom_bar(stat="identity", colour = "black", size = .1) +
+  scale_fill_manual(values = pal) +
+  xlab("Site Number") +
+  ylab("First 1000: Subj Count (n=48) per Site") +
+  coord_flip() +
+  theme_minimal()
+
+First_1000 %>% 
+  dplyr::group_by(scanner) %>% 
+  dplyr::summarize(scan_n = n()) %>%
+  ungroup() %>% 
+  ggplot(aes(x = scanner, y = scan_n, fill = scanner)) +
+  geom_bar(stat="identity", colour = "black", size = .1) +
+  geom_text(aes(x = scanner, y = scan_n, label = scan_n), vjust = -0.5) + # add text labels
+  labs(title = "First 1000 samples across scanners") +
+  xlab("") +
+  ylab("Subj Count (n) per Scanner") +
+  scale_fill_manual(values = pal) +
+  coord_flip() +
+  theme_minimal()
+
+
+Second_1000 %>% 
+  dplyr::group_by(site_id_l) %>% 
+  dplyr::summarize(n())
+
+Second_1000 %>% 
+  dplyr::group_by(site_id_l) %>% 
+  dplyr::summarize(Sites = n()) %>%
+  ungroup() %>% 
+  ggplot(aes(x = site_id_l, y = Sites, fill = site_id_l)) +
+  geom_bar(stat="identity", colour = "black", size = .1) +
+  scale_fill_manual(values = pal) +
+  xlab("") +
+  ylab("Second 1000: Subj Count (n=48) per Site") +
+  coord_flip() +
+  theme_minimal()
+
+Second_1000 %>% 
+  dplyr::group_by(scanner) %>% 
+  dplyr::summarize(scan_n = n()) %>%
+  ungroup() %>% 
+  ggplot(aes(x = scanner, y = scan_n, fill = scanner)) +
+  geom_bar(stat="identity", colour = "black", size = .1) +
+  geom_text(aes(x = scanner, y = scan_n, label = scan_n), vjust = -0.5) + # add text labels
+  labs(title = "Second 1000 samples across scanners") +
+  xlab("") +
+  ylab("Subj Count (n) per scanner") +
+  scale_fill_manual(values = pal) +
+  coord_flip() +
+  theme_minimal()
+```
+
+For the fMRIprep/MRIQC steps, will need a list to find out which subjects and subjects' runs are available in the ABCD-BIDS Community (ABCC) for the MID task and which pass preprocessing, etc. Specifically, not all IDs will have  Year 2 [Follow-up] folders (anat & func & fmap). This is generated based on the data available on ABCC DCAN servers as of **January 2023 (post Stage 1 Acceptance)**.  
+
+```{r echo=TRUE}
+id_list = data.frame(subj_ids = c(First_1000$subjectkey %>% gsub("_","",.), 
+                                  Second_1000$subjectkey %>% gsub("_","",.),
+                                  ABCD_UMonly$subjectkey %>% gsub("_","",.)),
+                     subsample = c(First_1000$subsample,
+                                   Second_1000$subsample,
+                                   ABCD_UMonly$subsample)
+                     )
+
+uniq_ids = distinct(id_list, subj_ids, .keep_all = TRUE)
+```
+
+From the subsample of in `First_1000`, `Second_1000` and `ABCD_UMonly` from the Year 2 NDA list of subjects, below are the number of subjects on the ABCC that had:
+
+1) Anatomy folder
+2) fmap folder
+3) MID folder
+
+This does not exclude subjects that 1) do not have behavioral MID data, 2) performed poorly during MID task, 3) failed Preprocessing and/or 4) had high motion. These exclusions and descriptions will described further below.
+
+```{r echo=TRUE}
+scan_subj = read_csv("./subject_details/scan_ids.csv", show_col_types = FALSE)
+
+# subjects from ID_list in scan_subj_list 
+available_subjects = id_list[id_list$subj_ids %in% scan_subj$scan_id,]
+
+# count & plot
+available_subjects %>% 
+  dplyr::group_by(subsample) %>% 
+  dplyr::summarize(subj_n = n()) %>%
+  ungroup() %>% 
+  ggplot(aes(x = subj_n, y = subsample, fill = subsample)) +
+  geom_bar(stat="identity", colour = "black", size = .1) +
+  geom_text(aes(x = subj_n, y = subsample, label = subj_n), vjust = -0.5) + # add text labels
+  scale_fill_manual(values = pal) +
+  xlab("Subsample N") +
+  ylab("Subsampe") +
+  coord_flip() +
+  theme_minimal()
+
+```
+save ut the csf of the `distinct` ids to use in the QC + GLM analyses
+```{r}
+# save out the unique values
+# save .csv to iteratore over for fMRIprep related items
+write_csv(distinct(available_subjects, subj_ids, .keep_all = TRUE), 
+          "./subject_details/distinct_subset_ids.csv")
+```
+
+
+# QC Data {.tabset}
+
+Load data files for QC. This includes data for manual QC, roi-voxel overlap, motion, accuracy and response time info
+
+## *ABCD*
+
+```{r echo=TRUE}
+abcd_manual_qc = read.csv("../output/ABCD/qc-manual_type-task-bold.csv", sep = ",", header = TRUE) 
+abcd_estimate_qc = read.csv("../output/ABCD/region_overlay-roivoxels.csv", sep = ",", header = TRUE) 
+abcd_estimate_qc$subject = abcd_estimate_qc$subj %>% gsub("sub-","",.)
+abcd_roi_qc = read.csv("../output/ABCD/task-MID_summ-mot-acc-rt.csv", sep = ",", header = TRUE)
+abcd_roi_qc$subject = abcd_roi_qc$Subject %>% gsub("sub-","",.)
+
+
+abcd_qc_data = left_join(x = abcd_manual_qc, y = abcd_estimate_qc, by = 'subject')
+abcd_qc_data = left_join(x = abcd_qc_data, y = abcd_roi_qc, by = 'subject')
+# some rows duplicated via above, removing duplicates
+abcd_qc_data = abcd_qc_data[!duplicated(abcd_qc_data), ]
+```
+
+### Data Qual/Avail
+
+- Bad BOLD (1 = good, 2 = fair, 3 = bad/exclude)
+- Missing BOLD Run 1 and/or Run 2
+- Missing E-prime behavior
+
+```{r echo=TRUE}
+abcd_qc_data %>% 
+  group_by(X1_good_2_fair_3_bad) %>% 
+  summarise(quality_bold = n()) %>% 
+  summarise(quality_bold, total = sum(quality_bold), percent = quality_bold/sum(quality_bold))
+
+abcd_qc_data %>% 
+  mutate(missing = if_else(miss_run1 == 1, "Missing","Available")) %>% 
+  group_by(missing) %>% 
+  summarise(missingrun1 = n()) %>% 
+  mutate(total = sum(missingrun1), percent = missingrun1 / sum(missingrun1))
+
+abcd_qc_data %>% 
+  mutate(missing = if_else(miss_run2 == 1, "Missing","Available")) %>% 
+  group_by(missing) %>%
+  summarise(missingrun2 = n()) %>% 
+  mutate(total = sum(missingrun2), percent = missingrun2 / sum(missingrun2))
+
+abcd_qc_data %>% 
+  mutate(missing = if_else(miss_eprime == 1, "Missing","Available")) %>% 
+  group_by(missing) %>%
+  summarise(misseprime = n()) %>% 
+  mutate(total = sum(misseprime), percent = misseprime / sum(misseprime))
+
+abcd_qc_data %>% 
+  filter(site=="site19") %>% 
+  summarise(site19 = n()) 
+
+```
+- fMRIPrep mean Framewise displacement > .90
+- Avg ROI voxels < 50%
+- Behavior poor based on avg run performance <= 50% and trial-wise/run note details
+
+```{r}
+abcd_qc_data$Nacc_run1 <- (abcd_qc_data$X01_L.NAcc+abcd_qc_data$X01_R.NAcc)/2
+abcd_qc_data$Nacc_run2 <- (abcd_qc_data$X02_L.NAcc+abcd_qc_data$X02_R.NAcc)/2
+
+abcd_voxel_long = abcd_qc_data %>% 
+  select(subject, Nacc_run1,Nacc_run2) %>% 
+  gather(key = "Run", value = "value", Nacc_run1:Nacc_run2)
+
+abcd_voxel_long$Type <- str_split(abcd_voxel_long$Run, "_", simplify = TRUE)[, 1]
+abcd_voxel_long$Run <- str_split(abcd_voxel_long$Run, "_", simplify = TRUE)[, 2]
+
+abcd_voxel_long %>% 
+  ggplot(aes(y = value, colour = Run)) +
+  geom_boxplot(na.rm = TRUE) +
+  ylim(c(0,1.25))+
+  scale_colour_manual(values = pal) +
+  geom_hline(yintercept = .5) +
+  labs(title = "Voxels within ROI masks for subjects across runs",subtitle = "cut-off 50% avg for subjects") +
+  theme_minimal()
+```
+
+```{r}
+abcd_bold_beh_long = abcd_qc_data %>% 
+  select(subject, mFD_run1:mrt_run2) %>% 
+  gather(key = "Run", value = "value", mFD_run1:mrt_run2)
+
+abcd_bold_beh_long$Type <- str_split(abcd_bold_beh_long$Run, "_", simplify = TRUE)[, 1]
+abcd_bold_beh_long$Run <- str_split(abcd_bold_beh_long$Run, "_", simplify = TRUE)[, 2]
+
+abcd_bold_beh_long %>% 
+  ggplot(aes(y = value, colour = Run)) +
+  geom_boxplot(na.rm = TRUE) +
+  scale_colour_manual(values = pal) +
+  facet_wrap(~Type, scales = 'free') +
+  theme_minimal()
+```
+
+### Exlusion
+
+The initial N for the abcd sample was n = `r nrow(abcd_qc_data)`. Subjects were excluded for the reasons described above (per the stage 1 registered report). The exclusions were in sequence:
+
+- [64] excluded that had bad or non-existent MID BOLD data
+- [194] excluded that were missing e-prime data for run 01 or run 02
+- [44] excluded for mFD > .90
+- [1] excluded for having ROI coverage of < 50% for the NAcc across run01 and run02
+- [4] excluded for poor performance displayed and notes
+
+```{r}
+abcd_qc_data$acc_avg <- (abcd_qc_data$acc_run1+abcd_qc_data$acc_run2)/2
+abcd_qc_data$mrt_avg <- (abcd_qc_data$mrt_run1+abcd_qc_data$mrt_run2)/2
+
+abcd_qc_data %>% 
+  filter(X1_good_2_fair_3_bad != 3) %>%# 67 excluded
+  filter(miss_run1 != 1 & miss_run2 != 1) %>% # 0 excluded
+  filter(miss_eprime != 1) %>% # 197
+  filter(mFD_run1 < .9 & mFD_run2 < .9) %>% # 42 excluded
+  filter(Nacc_run1 > .50 & Nacc_run2 > .50) %>% # 1 excluded
+#  ## behavioral exclusion, behavior described for subjects:
+#  ## sub-15, below 50% avg, high reward cues as expected % near zero for $0 cues
+#  ## sub-62, below 50% avg, same as 15, high reward cues at or above 60%, $ near 0%
+#  ## sub-52, 40% avg, behavior dropped linearly during run 2
+  filter(acc_avg > .40) %>% # excluded 4
+  filter(site!="site19") %>% # 33 site19 excluded
+  nrow(.)
+```
+
+subset after exclusions
+```{r}
+abcd_subset = abcd_qc_data %>% 
+  filter(X1_good_2_fair_3_bad != 3) %>% # 64 excluded
+  filter(miss_run1 != 1 & miss_run2 != 1) %>% # 0 excluded
+  filter(miss_eprime != 1) %>% # 0 excluded
+  filter(mFD_run1 < .9 & mFD_run2 < .9) %>% # 42 excluded
+  filter(Nacc_run1 > .50 & Nacc_run2 > .50) %>% # 0 excluded
+  filter(acc_avg > .40) %>% # excluded 4=
+  filter(site!="site19") %>%
+  select(subject, subsample, mFD_run1:mrt_run2) 
+  
+```
+
+
+```{r}
+abcd_subs = abcd_subset %>% 
+  select(subject,subsample)
+
+write.table(abcd_subs, "../output/ABCD/abcd_final_subjs.tsv", sep = "\t", col.names = FALSE, row.names = FALSE)
+```
+
+The final ABCD sample contains **`r nrow(abcd_subs)`** subjects. These are used in the subsequent steps
+
+
+
+## *AHRB*
+
+Data were QC'd for several factors and exclusion steps are based on several key items:
+
+- availability of data & 
+- motion
+- signal
+- behavioral
+
+
+### Load data files for QC
+```{r echo=TRUE}
+ahrb_manual_qc = read.csv("../output/AHRB/qc-manual_type-task-bold.csv", sep = ",", header = TRUE) 
+ahrb_estimate_qc = read.csv("../output/AHRB/region_overlay-roivoxels.csv", sep = ",", header = TRUE) %>% 
+  rename(subject = 'subj')
+ahrb_roi_qc = read.csv("../output/AHRB/subs-103_task-mid_summ-mot-acc-rt.csv", sep = ",", header = TRUE) %>% 
+  rename(subject = 'Subject')
+
+
+ahrb_qc_data = left_join(x = ahrb_manual_qc, y = ahrb_estimate_qc, by = 'subject')
+ahrb_qc_data = left_join(x = ahrb_qc_data, y = ahrb_roi_qc, by = 'subject')
+
+# relabel NA which = 0
+ahrb_qc_data$miss_run1[is.na(ahrb_qc_data$miss_run1)] <- 0
+ahrb_qc_data$miss_run2[is.na(ahrb_qc_data$miss_run2)] <- 0
+ahrb_qc_data$miss_eprime[is.na(ahrb_qc_data$miss_eprime)] <- 0
+```
+
+
+### Data Qual/Avail
+
+- Bad BOLD (1 = good, 2 = fair, 3 = bad/exclude)
+- Missing BOLD Run 1 and/or Run 2
+- Missing E-prime behavior
+
+```{r echo=TRUE}
+ahrb_qc_data %>% 
+  group_by(X1_good_2_fair_3_bad) %>% 
+  summarise(quality_bold = n()) %>% 
+  summarise(quality_bold, total = sum(quality_bold), percent = quality_bold/sum(quality_bold))
+
+ahrb_qc_data %>% 
+  mutate(missing = if_else(miss_run1 == 1, "Missing","Available")) %>% 
+  group_by(missing) %>% 
+  summarise(missingrun1 = n()) %>% 
+  mutate(total_run1 = sum(missingrun1), percent = missingrun1 / sum(missingrun1))
+
+ahrb_qc_data %>% 
+  mutate(missing = if_else(miss_run2 == 1, "Missing","Available")) %>% 
+  group_by(missing) %>%
+  summarise(missingrun2 = n()) %>% 
+  mutate(total_run2 = sum(missingrun2), percent = missingrun2 / sum(missingrun2))
+
+ahrb_qc_data %>% 
+  mutate(missing = if_else(miss_eprime == 1, "Missing","Available")) %>% 
+  group_by(missing) %>%
+  summarise(misseprime = n()) %>% 
+  mutate(total_eprime = sum(misseprime), percent = misseprime / sum(misseprime))
+
+```
+
+- fMRIPrep mean Framewise displacement > .90
+- Avg ROI voxels < 50%
+- Behavior poor based on avg run performance <= 50% and trial-wise/run note details
+
+```{r}
+ahrb_qc_data$Nacc_run1 <- (ahrb_qc_data$X01_L.NAcc+ahrb_qc_data$X01_R.NAcc)/2
+ahrb_qc_data$Nacc_run2 <- (ahrb_qc_data$X02_L.NAcc+ahrb_qc_data$X02_R.NAcc)/2
+
+ahrb_voxel_long = ahrb_qc_data %>% 
+  select(subject, Nacc_run1,Nacc_run2) %>% 
+  gather(key = "Run", value = "value", Nacc_run1:Nacc_run2)
+
+ahrb_voxel_long$Type <- str_split(ahrb_voxel_long$Run, "_", simplify = TRUE)[, 1]
+ahrb_voxel_long$Run <- str_split(ahrb_voxel_long$Run, "_", simplify = TRUE)[, 2]
+
+ahrb_voxel_long %>% 
+  ggplot(aes(y = value, colour = Run)) +
+  geom_boxplot(na.rm = TRUE) +
+  ylim(c(0,1.25))+
+  scale_colour_manual(values = pal) +
+  geom_hline(yintercept = .5) +
+  labs(title = "Voxels within ROI masks for subjects across runs",subtitle = "cut-off 50% avg for subjects") +
+  theme_minimal()
+```
+
+
+```{r}
+ahrb_bold_beh_long = ahrb_qc_data %>% 
+  select(subject, mFD_run1:mrt_run2) %>% 
+  gather(key = "Run", value = "value", mFD_run1:mrt_run2)
+
+ahrb_bold_beh_long$Type <- str_split(ahrb_bold_beh_long$Run, "_", simplify = TRUE)[, 1]
+ahrb_bold_beh_long$Run <- str_split(ahrb_bold_beh_long$Run, "_", simplify = TRUE)[, 2]
+
+ahrb_bold_beh_long %>% 
+  ggplot(aes(y = value, colour = Run)) +
+  geom_boxplot(na.rm = TRUE) +
+  scale_colour_manual(values = pal) +
+  facet_wrap(~Type, scales = 'free') +
+  theme_minimal()
+```
+
+
+### Exlusion
+
+The initial N for the ahrb sample was n = `r nrow(ahrb_qc_data)`. Subjects were excluded for the reasons described above (per the stage 1 registered report). The exclusions were in sequence:
+
+- [3] excluded that had bad or non-existent MID BOLD data
+- [2] excluded that were missing e-prime data for run 01 or run 02
+- [0] excluded for mFD > .90
+- [5] excluded for having ROI coverage of < 50% for the NAcc across run01 and run02
+- [1] excluded for poor performance displayed and notes
+
+```{r}
+ahrb_qc_data$acc_avg <- (ahrb_qc_data$acc_run1+ahrb_qc_data$acc_run2)/2
+ahrb_qc_data$mrt_avg <- (ahrb_qc_data$mrt_run1+ahrb_qc_data$mrt_run2)/2
+
+ahrb_qc_data %>% 
+  filter(X1_good_2_fair_3_bad != 3) %>% # 3 excluded
+  filter(miss_run1 != 1 & miss_run2 != 1 & miss_eprime != 1) %>% # 2 excluded
+  filter(mFD_run1 < .9 & mFD_run2 < .9) %>% # 0 excluded
+  filter(Nacc_run1 > .50 & Nacc_run2 > .50) %>% # 5 excluded
+  
+  # behavioral exclusion, behavior described for subjects:
+  # sub-15, below 50% avg, high reward cues as expected % near zero for $0 cues
+  # sub-62, below 50% avg, same as 15, high reward cues at or above 60%, $ near 0%
+  # sub-52, 40% avg, behavior dropped linearly during run 2
+  filter(acc_avg > .40) %>% # excluded 1, sub-52
+  nrow(.)
+```
+
+subset data after exclusions
+```{r}
+ahrb_subset = ahrb_qc_data %>% 
+  filter(X1_good_2_fair_3_bad != 3) %>% # 3 excluded
+  filter(miss_run1 != 1 & miss_run2 != 1 & miss_eprime != 1) %>% # 2 excluded
+  filter(mFD_run1 < .9 & mFD_run2 < .9) %>% # 0 excluded
+  filter(Nacc_run1 > .50 & Nacc_run2 > .50) %>% # 5 excluded
+  filter(acc_avg > .40) %>% 
+  select(subject, mFD_run1:mrt_run2)
+
+```
+
+```{r}
+ahrb_subs = ahrb_subset %>% 
+  select(subject)
+
+write.table(ahrb_subs, "../output/AHRB/ahrb_final_subjs.tsv", sep = "\t", col.names = FALSE, row.names = FALSE)
+```
+
+The final AHRB sample contains **`r nrow(ahrb_subs)`** subjects. These are used in the subsequent steps
+
+
+
+## *MLS*
+
+QC data to provide exclusion details based on steps relating to:
+
+- quality of bold and availability of data
+- motion
+- signal
+- behavioral
+
+
+### Load data files for QC
+```{r}
+mls_manual_qc = read.csv("../output/MLS/qc-manual_type-task-bold.csv", sep = ",", header = TRUE) 
+mls_estimate_qc = read.csv("../output/MLS/region_overlay-roivoxels.csv", sep = ",", header = TRUE) %>% 
+  rename(subject = 'subj')
+mls_roi_qc = read.csv("../output/MLS/subs-119_task-reward_summ-mot-acc-rt.csv", sep = ",", header = TRUE) %>% 
+  rename(subject = 'Subject')
+
+mls_qc_data = left_join(x = mls_manual_qc, y = mls_estimate_qc, by = 'subject')
+mls_qc_data = left_join(x = mls_qc_data, y = mls_roi_qc, by = 'subject')
+
+# relabel NA which = 0
+mls_qc_data$miss_run1[is.na(mls_qc_data$miss_run1)] <- 0
+mls_qc_data$miss_run2[is.na(mls_qc_data$miss_run2)] <- 0
+mls_qc_data$miss_eprime[is.na(mls_qc_data$miss_eprime)] <- 0
+```
+
+
+### Data Qual/Avail
+
+- Bad BOLD (1 = good, 2 = fair, 3 = bad/exclude)
+- Missing BOLD Run 1 and/or Run 2
+- Missing E-prime behavior
+
+```{r}
+mls_qc_data %>% 
+  group_by(X1_good_2_fair_3_bad) %>% 
+  summarise(quality_bold = n()) %>% 
+  mutate(total = sum(quality_bold), percent = quality_bold / sum(quality_bold))
+
+mls_qc_data %>% 
+  mutate(missing = if_else(miss_run1 == 1, "Missing","Available")) %>% 
+  group_by(missing) %>% 
+  summarise(missingrun1 = n()) %>% 
+  mutate(total = sum(missingrun1), percent = missingrun1 / sum(missingrun1))
+
+mls_qc_data %>% 
+  mutate(missing = if_else(miss_run2 == 1, "Missing","Available")) %>% 
+  group_by(missing) %>%
+  summarise(missingrun2 = n()) %>% 
+  mutate(total = sum(missingrun2), percent = missingrun2 / sum(missingrun2))
+
+mls_qc_data %>% 
+  mutate(missing = if_else(miss_eprime == 1, "Missing","Available")) %>% 
+  group_by(missing) %>%
+  summarise(misseprime = n()) %>% 
+  mutate(total = sum(misseprime), percent = misseprime / sum(misseprime))
+
+```
+
+- fMRIPrep mean Framewise displacement > .90
+- Avg ROI voxels < 50%
+- Behavior poor based on avg run performance <= 50% and trial-wise/run note details
+
+```{r}
+mls_qc_data$Nacc_run1 <- (mls_qc_data$X01_L.NAcc+mls_qc_data$X01_R.NAcc)/2
+mls_qc_data$Nacc_run2 <- (mls_qc_data$X02_L.NAcc+mls_qc_data$X02_R.NAcc)/2
+
+mls_voxel_long = mls_qc_data %>% 
+  select(subject, Nacc_run1,Nacc_run2) %>% 
+  gather(key = "Run", value = "value", Nacc_run1:Nacc_run2)
+
+mls_voxel_long$Type <- str_split(mls_voxel_long$Run, "_", simplify = TRUE)[, 1]
+mls_voxel_long$Run <- str_split(mls_voxel_long$Run, "_", simplify = TRUE)[, 2]
+
+mls_voxel_long %>% 
+  ggplot(aes(y = value, colour = Run)) +
+  geom_boxplot(na.rm = TRUE) +
+  ylim(c(0,1.25))+
+  scale_colour_manual(values = pal) +
+  geom_hline(yintercept = .5) +
+  labs(title = "Voxels within ROI masks for subjects across runs", subtitle = "cut-off 50% avg for subjects") +
+  theme_minimal()
+
+
+```
+
+
+```{r}
+mls_bold_beh_long = mls_qc_data %>% 
+  select(subject, mFD_run1:mrt_run2) %>% 
+  gather(key = "Run", value = "value", mFD_run1:mrt_run2)
+
+mls_bold_beh_long$Type <- str_split(mls_bold_beh_long$Run, "_", simplify = TRUE)[, 1]
+mls_bold_beh_long$Run <- str_split(mls_bold_beh_long$Run, "_", simplify = TRUE)[, 2]
+
+mls_bold_beh_long %>% 
+  ggplot(aes(y = value, colour = Run)) +
+  geom_boxplot(na.rm = TRUE) +
+  scale_colour_manual(values = pal) +
+  facet_wrap(~Type, scales = 'free') +
+  theme_minimal()
+```
+
+
+### Exlusion
+
+The initial N for the ahrb sample was n = `r nrow(mls_qc_data)`. Subjects were excluded for the reasons described above (per the stage 1 registered report). The exclusions were in sequence:
+
+- [19] excluded that had bad or non-existent MID BOLD data
+- [39] excluded that were missing e-prime data for run 01 or run 02
+- [0] excluded for mFD > .90
+- [0] excluded for having ROI coverage of < 50% for the NAcc across run01 and run02
+- [7] excluded for poor performance displayed in reports
+
+```{r}
+mls_qc_data$acc_avg <- (mls_qc_data$acc_run1+mls_qc_data$acc_run2)/2
+mls_qc_data$mrt_avg <- (mls_qc_data$mrt_run1+mls_qc_data$mrt_run2)/2
+
+
+mls_qc_data %>% 
+  filter(X1_good_2_fair_3_bad != 3) %>% # exclude 19
+  filter(miss_run1 != 1 & miss_run2 != 1 & miss_eprime != 1) %>% # 39 excluded
+  filter(mFD_run1 < .9 | mFD_run2 < .9) %>% # 0 excluded
+  filter(Nacc_run1 > .50 & Nacc_run2 > .50) %>% # 0 excluded
+  ## behavioral exclusion, behavior described for subjects: 
+  ## sub-155 = 16%: participant failing to respond, exclude
+  ## sub-28 = 21%, barely trying run 1, run 2 gradually declining hit, exclude
+  ## sub-31 = 22%, both runs generally declining performance, exclude
+  ## sub-132 = 24%: second run participant failing to response, exclude
+  ## sub-139 = 29%: did better 2nd run, but run 1 seemed to not hit targets, exclude
+  ## sub-129 = 30%: run 1 behavior somewhat flat, but run 2 target high and stopped hitting, exclude
+  ## sub-183 = 37%, started run 1 poorly, better run two but insufficient combined, exclude
+  ## sub-62 = 38%, performance relatively stable, mainly trying on large rewards, and 2nd most on lg pun, include
+  ## sub-102 = 40%: participant engaged no odd declines/inclines, potentially hard calibration, include
+  ## sub-98 = 40%: relatively stable run 1, started slow, but high engagement run 2 better 80+% on lgreward, include
+  filter(acc_avg >= .38) %>% # excluded 7, sub-52
+  nrow(.)
+```
+
+subset subjects data after exclusions
+```{r}
+mls_subset = mls_qc_data %>% 
+  filter(X1_good_2_fair_3_bad != 3) %>% # 0 excluded
+  filter(miss_run1 != 1 & miss_run2 != 1 & miss_eprime != 1) %>% # 39 excluded
+  filter(mFD_run1 < .9 & mFD_run2 < .9) %>% # 0 excluded
+  filter(Nacc_run1 > .50 & Nacc_run2 > .50) %>% # 0 excluded
+  filter(acc_avg >=.38) %>% 
+  select(subject, mFD_run1:mrt_run2)
+```
+
+
+```{r}
+mls_subs = mls_subset %>% 
+  select(subject)
+
+write.table(mls_subs, "../output/MLS/mls_final_subjs.tsv", sep = "\t", col.names = FALSE, row.names = FALSE)
+```
+
+The final MLS sample contains **`r nrow(mls_subs)`** subjects. These data are used in the subsequent steps in the analyses
+
+# Aggregate Group Performance {.tabset}
+
+```{r}
+abcd_subset$sample <- "abcd"
+ahrb_subset$sample <- "ahrb"
+mls_subset$sample <- "mls"
+
+beh_comb <- rbind(abcd_subset[,-2],ahrb_subset,mls_subset)
+beh_comb$acc <- (beh_comb$acc_run1+beh_comb$acc_run2) / 2
+beh_comb$mrt <- (beh_comb$mrt_run1+beh_comb$mrt_run2) / 2
+
+beh_comb_long = beh_comb %>% 
+  select(subject, acc, mrt, sample) %>% 
+  gather(key = "type", value = "value", acc:mrt)
+
+```
+
+report differences and test via AOV
+ 
+```{r}
+beh_comb_long %>% 
+  mutate(type = case_when(
+    type == "acc" ~ "Probe Accuracy",
+    type == "mrt" ~ "Probe Mean Response Time",
+    TRUE ~ type)) %>% 
+  ggplot(aes(y = value, colour = sample)) +
+  geom_boxplot(na.rm = TRUE) +
+  scale_colour_manual(values = pal) +
+  facet_wrap(~type, scales = 'free') +
+  theme_minimal()
+```
+```{r}
+cat("Means and SD for the mean response times and probe accuracy for each of the three samples")
+beh_comb_long %>%
+  group_by(sample, type) %>%
+  summarise(mean_value = mean(value), sd_value = sd(value))
+
+cat("ANOVA and Tukey's HSD pairwise test for sample differences in accuracy")
+summary(aov(beh_comb_long$value[beh_comb_long$type=="acc"]~
+              beh_comb_long$sample[beh_comb_long$type=="acc"]))
+TukeyHSD(aov(beh_comb_long$value[beh_comb_long$type=="acc"]~
+              beh_comb_long$sample[beh_comb_long$type=="acc"])
+)
+
+cat("ANOVA and Tukey's HSD pairwise test for sample differences in mean response times")
+summary(aov(beh_comb_long$value[beh_comb_long$type=="mrt"]~
+              beh_comb_long$sample[beh_comb_long$type=="mrt"]))
+TukeyHSD(aov(beh_comb_long$value[beh_comb_long$type=="mrt"]~
+              beh_comb_long$sample[beh_comb_long$type=="mrt"])
+)
+```
+
+

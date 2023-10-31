@@ -1,0 +1,2214 @@
+---
+title: "DCN - Stage2 Analyses"
+author: "<h3>by Michael Demidenko</h3>"
+date: "`r format(Sys.time(), '%B %Y')`"
+output:
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    number_sections: yes
+    toc_depth: 2
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+    code_folding: hide
+    self_contained: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+tags: []
+subtitle: <h2><u>CFA, SEM, EFA and LSEM Analyses </u></h2>
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# install if no packages, load if install
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(simsem, plyr, stringr, tidyverse,corrplot, reshape2, data.table,ggplot2,ggrain,GGally, patchwork,
+               jpeg, Hmisc,nFactors,car,psych, paran, caret, #for EFA
+               semTools, semPlot, lavaan, esemComp,glue, # FOR CFA/ESEM
+               parameters, superheat,weights, devtools, heatmaply, knitr, kableExtra, # For plotting/tabling
+               sirt, msm
+               )
+
+# get session info 
+session_info = sessionInfo()
+
+# create function to round to third decimal the variables if they are nuermic
+round_var_3dec <- function(x) {
+  if (is.numeric(x)) {
+    return(round(x, 3))
+  } else {
+    return(x)
+  }
+}
+
+# create function to rename python names to fit stage 1 naming rules for more interpretable and R variable compatibility
+rename_columns <- function(df) {
+  df <- df %>% 
+    rename(
+      # Rename L/S Gain > Neut : Insula & NAcc L/R r1/r2  
+      AWin_v_Neut_L_Ins_r1 = "X01_LSgain.Neut_L.Ins", AWin_v_Neut_R_Ins_r1 = "X01_LSgain.Neut_R.Ins",
+      AWin_v_Neut_L_Ins_r2 = "X02_LSgain.Neut_L.Ins", AWin_v_Neut_R_Ins_r2 = "X02_LSgain.Neut_R.Ins",
+      AWin_v_Neut_L_NAc_r1 =  "X01_LSgain.Neut_L.NAcc", AWin_v_Neut_R_NAc_r1 = "X01_LSgain.Neut_R.NAcc",
+      AWin_v_Neut_L_NAc_r2 = "X02_LSgain.Neut_L.NAcc", AWin_v_Neut_R_NAc_r2 = "X02_LSgain.Neut_R.NAcc",
+      # L Gain > Neut : Ins & NAcc L/R r1/r2  
+      BWin_v_Neut_L_Ins_r1 = "X01_Lgain.Neut_L.Ins", BWin_v_Neut_R_Ins_r1 = "X01_Lgain.Neut_R.Ins",
+      BWin_v_Neut_L_Ins_r2 = "X02_Lgain.Neut_L.Ins", BWin_v_Neut_R_Ins_r2 = "X02_Lgain.Neut_R.Ins",
+      BWin_v_Neut_L_NAc_r1 =  "X01_Lgain.Neut_L.NAcc", BWin_v_Neut_R_NAc_r1 = "X01_Lgain.Neut_R.NAcc",
+      BWin_v_Neut_L_NAc_r2 = "X02_Lgain.Neut_L.NAcc", BWin_v_Neut_R_NAc_r2 = "X02_Lgain.Neut_R.NAcc",
+      # B Gain > B Lose : Ins & NAcc L/R r1/r2  
+      BWin_v_BLose_L_Ins_r1 = "X01_Lgain.Lloss_L.Ins", BWin_v_BLose_R_Ins_r1 = "X01_Lgain.Lloss_R.Ins",
+      BWin_v_BLose_L_Ins_r2 = "X02_Lgain.Lloss_L.Ins", BWin_v_BLose_R_Ins_r2 = "X02_Lgain.Lloss_R.Ins",
+      BWin_v_BLose_L_NAc_r1 = "X01_Lgain.Lloss_L.NAcc", BWin_v_BLose_R_NAc_r1 = "X01_Lgain.Lloss_R.NAcc",
+      BWin_v_BLose_L_NAc_r2 = "X02_Lgain.Lloss_L.NAcc", BWin_v_BLose_R_NAc_r2 = "X02_Lgain.Lloss_R.NAcc",
+      # LS Loss > Neut : Ins & NAcc L/R r1/r2 
+      ALose_v_Neut_L_Ins_r1 = "X01_LSloss.Neut_L.Ins", ALose_v_Neut_R_Ins_r1 = "X01_LSloss.Neut_R.Ins",
+      ALose_v_Neut_L_Ins_r2 = "X02_LSloss.Neut_L.Ins", ALose_v_Neut_R_Ins_r2 = "X02_LSloss.Neut_R.Ins",
+      ALose_v_Neut_L_NAc_r1 =  "X01_LSloss.Neut_L.NAcc", ALose_v_Neut_R_NAc_r1 = "X01_LSloss.Neut_R.NAcc",
+      ALose_v_Neut_L_NAc_r2 = "X02_LSloss.Neut_L.NAcc",  ALose_v_Neut_R_NAc_r2 = "X02_LSloss.Neut_R.NAcc",
+      # Lg Loss > Neut : Ins & NAcc L/R r1/r2 
+      BLose_v_Neut_L_Ins_r1 = "X01_Lloss.Neut_L.Ins", BLose_v_Neut_R_Ins_r1 = "X01_Lloss.Neut_R.Ins", 
+      BLose_v_Neut_L_Ins_r2 = "X02_Lloss.Neut_L.Ins", BLose_v_Neut_R_Ins_r2 = "X02_Lloss.Neut_R.Ins",
+      BLose_v_Neut_L_NAc_r1 = "X01_Lloss.Neut_L.NAcc", BLose_v_Neut_R_NAc_r1 = "X01_Lloss.Neut_R.NAcc" , 
+      BLose_v_Neut_L_NAc_r2 = "X02_Lloss.Neut_L.NAcc", BLose_v_Neut_R_NAc_r2 = "X02_Lloss.Neut_R.NAcc",
+      # Lg Loss > Lg Gain : Ins & NAcc L/R r1/r2 
+      BLose_v_BWin_L_Ins_r1 = "X01_Lloss.Lgain_L.Ins", BLose_v_BWin_R_Ins_r1 = "X01_Lloss.Lgain_R.Ins",
+      BLose_v_BWin_L_Ins_r2 = "X02_Lloss.Lgain_L.Ins", BLose_v_BWin_R_Ins_r2 = "X02_Lloss.Lgain_R.Ins",
+      BLose_v_BWin_L_NAc_r1 = "X01_Lloss.Lgain_L.NAcc", BLose_v_BWin_R_NAc_r1 = "X01_Lloss.Lgain_R.NAcc",
+      BLose_v_BWin_L_NAc_r2 = "X02_Lloss.Lgain_L.NAcc", BLose_v_BWin_R_NAc_r2 = "X02_Lloss.Lgain_R.NAcc"
+    )
+  return(df)
+}
+
+```
+RMSEA .35 SRMR .20 TLI .06 CI .12
+```{r}
+# color palate for site related plotting
+pal<- c("#1D91C0","#67001F","#CB181D","#78C679","#F46D43","#F7FCFD",
+                 "#A6CEE3","#FD8D3C","#A6D854","#D4B9DA","#6A51A3",
+                 "#7F0000","#D9D9D9","#FFF7BC","#000000","#F0F0F0",
+                 "#C7EAE5","#003C30","#F16913","#FFF7FB","#8C6BB1",
+                 "#C7E9B4","#762A83","#FC9272","#DF65B0","#EF3B2C",
+                 "#74C476","#E5F5F9","#AE017E","#F7F7F7")
+```
+
+# Project Description
+
+This project is based on the Stage 1 registered report submitted at Developmental Cognitive Neuroscience (Demidenko et al [2022](https://osf.io/a6t8k)). The proposal is to use a sub-sample of the full `Year 2` (follow-up to baseline) ABCD sample. This includes 1000 participants for the initial analysis and a held out 1000 participants for the follow-up LSEM/EFA model.
+
+This html document and .rmd was last ran using the platform: `r session_info$R.version$platform` version: `r `session_info$session_info$R.version$version.string` on `r format(Sys.time(), '%B %Y')` by Michael Demidenko.
+
+
+# Load Data {.tabset}
+
+Importing the final data for the ABCD, AHRB and MLS data. Three variable lists are created:
+
+- mod_vars: ROIs/Contrasts specified in the a prior model/used for CFA, these are used for subsetting for plotting and ESEM
+- nacc_pairs: ROIs/contrasts subset for NACC to evaluates distribution and plots between variables
+- insula_pairs: ROIs/contrasts subset for Insula to evaluate distribution and plots between variables
+
+The subjects for each sample are loaded and variable names are relabeled to match stage 1 code. Note, the mean signal intensity values from python are floats, so they continue until the 9/10th decimal place. This level of precision is not necessary for mean signal intesity values and lavaan encounters errors with these values when trying to fit models. So we round them to the third decimal place. 
+
+```{r}
+#Variables used in CFA model, reformat so bileral and runs and similar contrast next to eachother
+mod_vars = c(
+  # Approach
+  # nacc
+  "AWin_v_Neut_L_NAc_r1", "AWin_v_Neut_R_NAc_r1",
+  "AWin_v_Neut_L_NAc_r2", "AWin_v_Neut_R_NAc_r2",
+  "BWin_v_Neut_L_NAc_r1", "BWin_v_Neut_R_NAc_r1",
+  "BWin_v_Neut_L_NAc_r2", "BWin_v_Neut_R_NAc_r2",
+  "BWin_v_BLose_L_NAc_r1", "BWin_v_BLose_R_NAc_r1",
+  "BWin_v_BLose_L_NAc_r2", "BWin_v_BLose_R_NAc_r2",
+  # insula
+  "AWin_v_Neut_R_Ins_r1", "AWin_v_Neut_R_Ins_r2",
+  "BWin_v_Neut_R_Ins_r1","BWin_v_Neut_R_Ins_r2",
+  # avoid 
+  # insula
+  "ALose_v_Neut_L_Ins_r1", "ALose_v_Neut_R_Ins_r1",
+  "ALose_v_Neut_L_Ins_r2", "ALose_v_Neut_R_Ins_r2",
+  "BLose_v_Neut_L_Ins_r1", "BLose_v_Neut_R_Ins_r1",
+  "BLose_v_Neut_L_Ins_r2", "BLose_v_Neut_R_Ins_r2",
+  "BLose_v_BWin_L_Ins_r1", "BLose_v_BWin_R_Ins_r1",
+  "BLose_v_BWin_L_Ins_r2", "BLose_v_BWin_R_Ins_r2"
+)
+
+# for pair plots: NAcc ROIs & Insula ROIs
+
+nacc_pairs = c("AWin_v_Neut_L_NAc_r1", "AWin_v_Neut_R_NAc_r1",
+             "AWin_v_Neut_L_NAc_r2", "AWin_v_Neut_R_NAc_r2",
+             "BWin_v_Neut_L_NAc_r1", "BWin_v_Neut_R_NAc_r1",
+             "BWin_v_Neut_L_NAc_r2", "BWin_v_Neut_R_NAc_r2",
+             "BWin_v_BLose_L_NAc_r1", "BWin_v_BLose_R_NAc_r1",
+             "BWin_v_BLose_L_NAc_r2", "BWin_v_BLose_R_NAc_r2"
+)
+
+insula_pairs = c("AWin_v_Neut_R_Ins_r1", "AWin_v_Neut_R_Ins_r2",
+             "BWin_v_Neut_R_Ins_r1","BWin_v_Neut_R_Ins_r2",
+             "ALose_v_Neut_L_Ins_r1", "ALose_v_Neut_R_Ins_r1",
+             "ALose_v_Neut_L_Ins_r2", "ALose_v_Neut_R_Ins_r2",
+             "BLose_v_Neut_L_Ins_r1", "BLose_v_Neut_R_Ins_r1",
+             "BLose_v_Neut_L_Ins_r2", "BLose_v_Neut_R_Ins_r2",
+             "BLose_v_BWin_L_Ins_r1", "BLose_v_BWin_R_Ins_r1",
+             "BLose_v_BWin_L_Ins_r2", "BLose_v_BWin_R_Ins_r2"
+)
+
+```
+
+
+##  *ABCD*
+
+Load ABCD data
+
+```{r message=FALSE, warning=FALSE}
+abcd_id_include = read.csv("../output/ABCD/abcd_final_subjs.tsv", sep = "\t", header = FALSE) 
+colnames(abcd_id_include) = c("subject","subsample")
+
+abcd_include_first = abcd_id_include[abcd_id_include$subsample == "First_1k",]
+abcd_include_second  = abcd_id_include[abcd_id_include$subsample == "Second_1k",]
+#abcd_include_um = abcd_id_include[abcd_id_include$subsample == "UM_Only",]
+
+abcd_roi_sig = read.csv("../output/ABCD/region_roi-meansignal.csv", sep = ",", header = TRUE) 
+abcd_roi_sig$subject = abcd_roi_sig$subj %>% gsub("sub-","",.)
+abcd_roi_sig = rename_columns(abcd_roi_sig)
+
+# Load NDA information
+nda_df = read_csv("../output/NDA_MID_QC_20230723.csv",show_col_types = F) %>% 
+  select(subjectkey, interview_age, sex, site_id_l, scanner, p_puberty, y_puberty)
+nda_df$subject = nda_df$subjectkey %>% gsub("_","",.)
+nda_df$age = round(nda_df$interview_age/12,2)
+
+# join datasets & remove those not needed
+abcd_df = left_join(x = abcd_include_first, y = abcd_roi_sig, by = "subject") 
+abcd_df = left_join(x = abcd_df, y = nda_df, by = "subject") %>% 
+  select(-subjectkey,-subj)
+abcd_df2 = left_join(x = abcd_include_second, y = abcd_roi_sig, by = "subject") 
+abcd_df2 = left_join(x = abcd_df2, y = nda_df, by = "subject") %>% 
+  select(-subjectkey,-subj)
+
+# Round numeric values to 6th decimal to avoid positive definite errors
+# Apply the function to all columns of the data frame
+abcd_df[] <- lapply(abcd_df, round_var_3dec)
+abcd_df2[] <- lapply(abcd_df2, round_var_3dec)
+
+
+rm(abcd_id_include, nda_df, abcd_include_first,abcd_include_second, abcd_roi_sig,session_info)
+```
+
+
+## *AHRB*
+
+Load AHRB data
+
+```{r}
+ahrb_id_include = read.csv("../output/AHRB/ahrb_final_subjs.tsv", sep = "\t", header = FALSE) 
+colnames(ahrb_id_include) = c("subject")
+
+ahrb_roi_sig = read.csv("../output/AHRB/region_roi-meansignal.csv", sep = ",", header = TRUE) %>% 
+  rename(subject = "subj")
+ahrb_roi_sig = rename_columns(ahrb_roi_sig)
+
+# Load demo information
+ahrb_dem = read_csv("../code_stage2/subject_details/AHRB_Participant_Details.csv",show_col_types = F) %>% 
+  select(participant_id,age,sex) %>% 
+  rename(subject="participant_id")
+
+
+# join datasets & remove those not needed
+ahrb_df = left_join(x = ahrb_id_include, y = ahrb_roi_sig, by = "subject")
+ahrb_df = left_join(x = ahrb_df,y = ahrb_dem, by = "subject")
+ahrb_df$subsample = "ahrb"
+
+# round rois to 3 dec
+ahrb_df[] <- lapply(ahrb_df, round_var_3dec)
+
+rm(ahrb_id_include, ahrb_roi_sig, ahrb_dem)
+```
+
+## *MLS*
+
+Load MLS data
+
+```{r}
+mls_id_include = read.csv("../output/MLS/mls_final_subjs.tsv", sep = "\t", header = FALSE) 
+colnames(mls_id_include) = c("subject")
+
+mls_roi_sig = read.csv("../output/mls/region_roi-meansignal.csv", sep = ",", header = TRUE) %>% 
+  rename(subject = "subj")
+mls_roi_sig = rename_columns(mls_roi_sig)
+
+# Load demo information
+mls_dem = read_tsv("../code_stage2/subject_details/MLS_Participant_Details.tsv",show_col_types = F) %>% 
+  filter(StudyName==2) %>%
+  arrange(participant_id) %>%
+  group_by(participant_id) %>%
+  mutate(session = paste0(row_number())) %>% 
+  rename(subject="participant_id",age="ScanAge",sex="Sex") %>% 
+  # Here we are filtering sess-1 labels the below IDs as their sess-2 scan is used per recommendation from MLS team (how they have worked with data historically)
+  filter(!(subject %in% c("sub-05", "sub-106", "sub-11", "sub-118", "sub-123", "sub-210", 
+                          "sub-24", "sub-27", "sub-29", "sub-44", "sub-54", "sub-64", 
+                          "sub-88", "sub-92", "sub-97") & session == 1)) %>% 
+  select(subject, age,sex) %>% 
+  distinct(subject, .keep_all = TRUE)
+
+# join datasets and remove those not needed
+mls_df = left_join(x = mls_id_include, y = mls_roi_sig, by = "subject")
+mls_df = left_join(x = mls_df, y = mls_dem, by = "subject")
+
+mls_df$subsample = "mls"
+
+#round to 6 dec
+mls_df[] <- lapply(mls_df, round_var_3dec)
+
+rm(mls_id_include, mls_roi_sig,mls_dem)
+```
+
+
+Relabel non-numerical variables, e.g., Sex and Race so it is interpreted as counts/% instead of means/sds
+
+```{r}
+abcd_df$sex = if_else(abcd_df$sex=="M","Male","Female")
+abcd_df2$sex = if_else(abcd_df2$sex=="M","Male","Female")
+ahrb_df$sex = if_else(ahrb_df$sex==1,"Male","Female")
+mls_df$sex = if_else(mls_df$sex==2,"Male","Female")
+```
+
+## Combine Data
+
+Specifying group sample labels (e.g., ABCD, AHRB, MLS). Then, combine the three datasets, `abcd_df`,`ahrb_df` & `mls_df` into single dataset using rbind() named `brain_set`. The `set` label is used as the group factoring in the `cfa` models.
+
+```{r}
+# specific group set # and combined datasets using rbind
+abcd_df$set = 'ABCD'
+ahrb_df$set = 'AHRB'
+mls_df$set = 'MLS'
+abcd_df_r <- abcd_df[,c(1:50,52,57,58)]
+brain_set = rbind(abcd_df_r,ahrb_df,mls_df)
+rm(abcd_df_r)
+```
+
+## Demographics of Samples
+
+Report demographics (age/sex) across samples using the [table1](https://cran.r-project.org/web/packages/table1/vignettes/table1-examples.html) for participants w/ available/usable ROI data. 
+
+Three tables:
+
+  1. table for the primary ABCD sample, the AHRB and MLS samples. 
+  2. table for the held out ABCD sample
+
+```{r}
+# Summary between releases
+table1::label(brain_set$age) <- "Age (Years)"
+table1::label(brain_set$sex) <- "Sex"
+
+
+table1::table1(~age + sex | as.factor(set), data = brain_set)
+
+# Summary between releases
+table1::label(abcd_df2$age) <- "Age (Years)"
+table1::label(abcd_df2$sex) <- "Sex"
+
+
+table1::table1(~age + sex, data = abcd_df2)
+```
+
+
+# ROIs Distribution/Correlations {.tabset}
+
+Before running the models. Reviewing the distribution and properties of the ROI signals.
+To evaluate the bivariate point plots and distributions, the [ggpairs()](https://www.rdocumentation.org/packages/GGally/versions/1.5.0/topics/ggpairs) function is used. To display a bivariate correlation matrix for the a prior model regions of interest, both [cor()]https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/cor and [corrplot()](https://www.rdocumentation.org/packages/corrplot/versions/0.92/topics/corrplot) are used. 
+For the **`r length(mod_vars)`** Nacc & Insula ROIs from the two runs across six contrast types, there are **`r (length(mod_vars)^2 - length(mod_vars))/2`** unique correlations in the matrix. As stated in the registered report, the which() function is used identify any correlations that exceed r > |.85|. For the bivariate associations that exceed this a prior value the parameters will be fixed in the lavaan cfa models.
+
+
+## ABCD
+
+### Description of sites
+```{r}
+combined_abcd_dfs = rbind(abcd_df[1:57],abcd_df2)
+fir1k_plt <- abcd_df %>% 
+  dplyr::group_by(site_id_l) %>% 
+  dplyr::summarize(Sites = n()) %>%
+  ungroup() %>% 
+  ggplot(aes(x = site_id_l, y = Sites, fill = site_id_l)) +
+  geom_text(aes(x = site_id_l, y = Sites, label = Sites), hjust = -.5) + # add text labels
+  geom_bar(stat="identity", colour = "black", size = .1) +
+  labs(title = "First 1000 samples across sites after exclusions",
+       subtitle = "Initial per site n = 48") +
+  xlab("Site Number") +
+  ylab("Subj Count (n) per Site") +
+  scale_fill_manual(values = pal) +
+  coord_flip() +
+  theme_minimal()
+
+sec1k_plt <- abcd_df2 %>% 
+  dplyr::group_by(site_id_l) %>% 
+  dplyr::summarize(Sites = n()) %>%
+  ungroup() %>% 
+  ggplot(aes(x = site_id_l, y = Sites, fill = site_id_l)) +
+  geom_bar(stat="identity", colour = "black", size = .1) +
+  geom_text(aes(x = site_id_l, y = Sites, label = Sites), hjust = -.5) + # add text labels
+  labs(title = "Second 1000 samples across sites after exclusions",
+       subtitle = "Initial per site n = 48") +
+  xlab("Site Number") +
+  ylab("Subj Count (n) per Site") +
+  scale_fill_manual(values = pal) +
+  coord_flip() +
+  theme_minimal()
+
+comb2k_plt <- combined_abcd_dfs %>% 
+  dplyr::group_by(site_id_l) %>% 
+  dplyr::summarize(Sites = n()) %>%
+  ungroup() %>% 
+  ggplot(aes(x = site_id_l, y = Sites, fill = site_id_l)) +
+  geom_bar(stat="identity", colour = "black", size = .1) +
+  geom_text(aes(x = site_id_l, y = Sites, label = Sites), hjust = -.5) + # add text labels
+  labs(title = "Combined 2000 samples across sites after exclusions",
+       subtitle = "Initial per site n = 96") +
+  xlab("Site Number") +
+  ylab("Subj Count (n) per Site") +
+  scale_fill_manual(values = pal) +
+  coord_flip() +
+  theme_minimal()
+
+combscan_plt <- combined_abcd_dfs %>% 
+  dplyr::group_by(scanner) %>% 
+  dplyr::summarize(scan_n = n()) %>%
+  ungroup() %>% 
+  ggplot(aes(x = scanner, y = scan_n, fill = scanner)) +
+  geom_bar(stat="identity", colour = "black", size = .1) +
+  geom_text(aes(x = scanner, y = scan_n, label = scan_n), hjust = -0.5) + # add text labels
+  labs(title = "Combined 2000 samples across scanners after exclusions",
+       subtitle = "Initial: 1245 SIEMENS, 257 Philips, 479 GE") +
+  xlab("Site Number") +
+  ylab("Subj Count (n) per Site") +
+  ylim(c(0,800))+
+  scale_fill_manual(values = pal) +
+  coord_flip() +
+  theme_minimal()
+
+fir1k_plt
+sec1k_plt
+comb2k_plt
+combscan_plt
+```
+
+### Export IDs 
+
+Export subject IDs for each site and scanner to use in group [cohen's D] contrast maps 
+```{r eval=FALSE, include=FALSE}
+write_tsv(as.data.frame(abcd_df$subject),file = "../output/ABCD/group-ids/subs-first1k.tsv", col_names = FALSE)
+write_tsv(as.data.frame(abcd_df2$subject),file = "../output/ABCD/group-ids/subs-second1k.tsv", col_names = FALSE)
+
+scanner_list = c("Philips Medical Systems","SIEMENS")
+for (scan in scanner_list) {
+  sample = combined_abcd_dfs %>% 
+    select(subject,scanner) %>% 
+    filter(scanner == scan)
+  
+  path = paste0("../output/ABCD/group-ids/subs-", strsplit(scan, " ")[[1]][1],".tsv")
+  write_tsv(as.data.frame(sample$subject),file = path, col_names = FALSE)
+}
+
+sites_list = combined_abcd_dfs$site_id_l
+
+for (site in sites_list) {
+  sample = combined_abcd_dfs %>% 
+    select(subject,site_id_l) %>% 
+    filter(site_id_l == site)
+  
+  path = paste0("../output/ABCD/group-ids/subs-",site,".tsv")
+  write_tsv(as.data.frame(sample$subject),file = path, col_names = FALSE)
+}
+```
+
+### Correlations 
+
+Plot correlation matrix only of Left/Right NAcc and Insula mean signal intensity values for Contrasts and Regions used in the MID population model. (Note: diagonal is set to 0)
+
+```{r}
+abcd_cor = cor(abcd_df[,mod_vars]) 
+
+# numeric+string style names for correlation table 
+numstr_row <- row.names(abcd_cor)
+numstr_modrow_names <- paste0(1:28, "_", numstr_row)
+numstr_col <- colnames(abcd_cor)
+numstr_modcol_names <- paste0(1:28, "_", numstr_col)
+
+# Create table
+row.names(abcd_cor) <- numstr_modrow_names
+colnames(abcd_cor) <- numstr_modcol_names
+kable(as.data.frame(abcd_cor), booktabs = TRUE) %>%
+  kable_styling(font_size = 8,position = 'center')
+
+# Numeric only for plot
+numeric_row <- paste0(1:nrow(abcd_cor))
+numeric_col <- paste0(1:nrow(abcd_cor))
+rownames(abcd_cor) <- numeric_row
+colnames(abcd_cor) <- numeric_col
+
+a_cor_plt <- corrplot(abcd_cor , method = "color", tl.cex = .6, diag = TRUE)
+a_cor_plt
+```
+
+### Pairplots
+
+Distribution and plots of data points between two variables for NAcc and Insula pairs.
+
+```{r message=FALSE, warning=FALSE}
+ggpairs(abcd_df[,nacc_pairs]) + theme_minimal()
+ggpairs(abcd_df[,insula_pairs]) + theme_minimal()
+```
+
+### Bivariate: r > .85
+
+Check if any and which exceed r > .85
+
+```{r}
+# rerun to have original names: 
+abcd_cor = cor(abcd_df[,mod_vars]) 
+
+# Diagonal are all 1's, convert to 0 to avoid confusion
+diag(abcd_cor) <- 0
+
+# Find indices of correlations exceeding 0.84 on in upper.tri or lower.tri (otherwise redundant)
+abcd_high_index <- which(abcd_cor > 0.85 | abcd_cor < -0.85, arr.ind = TRUE)
+
+# Print the correlations that exceed 0.84
+abcdcor_rownames = row.names(abcd_cor)
+abcdcor_colnames = colnames(abcd_cor)
+
+# loop through which indices exceed the corr, print value and save name to list
+n1_exceed = 0
+abcd_exceedlist = list()
+for (i in 1:nrow(abcd_high_index)) {
+  n1_exceed = n1_exceed+1
+  row <- abcd_high_index[i, 1]
+  col <- abcd_high_index[i, 2]
+  correlation <- abcd_cor[row, col]
+  print(paste(n1_exceed,"-", abcdcor_rownames[row], "~", abcdcor_colnames[col], "r:", round(correlation,3)))
+  abcd_exceedlist[n1_exceed] <- paste(abcdcor_rownames[row], "~", abcdcor_colnames[col])
+}
+
+# after running, clean environment of uneccessary vars
+rm(row,col,correlation,i)
+```
+
+Of the **`r (length(mod_vars)^2 - length(mod_vars))/2`** unique correlations, the abcd study has **`r n1_exceed`** correlations that are r > .85
+
+## AHRB
+
+Run the correlation matrix and plot heatmap. Then, check whether an correlations exceed the Stage 1 specificed > .85
+
+### Correlations 
+
+Plot correlation matrix only of Left/Right NAcc and Insula mean signal intensity values for Contrasts and Regions used in the MID population model. (Note: diagonal is set to 0)
+
+```{r}
+ahrb_cor = cor(ahrb_df[,mod_vars]) 
+
+# numeric+string style names for correlation table 
+numstr_row <- row.names(ahrb_cor)
+numstr_modrow_names <- paste0(1:28, "_", numstr_row)
+numstr_col <- colnames(ahrb_cor)
+numstr_modcol_names <- paste0(1:28, "_", numstr_col)
+
+# Create table
+row.names(ahrb_cor) <- numstr_modrow_names
+colnames(ahrb_cor) <- numstr_modcol_names
+kable(as.data.frame(ahrb_cor), booktabs = TRUE) %>%
+  kable_styling(font_size = 8,position = 'center')
+
+# Numeric only for plot
+numeric_row <- paste0(1:nrow(ahrb_cor))
+numeric_col <- paste0(1:nrow(ahrb_cor))
+rownames(ahrb_cor) <- numeric_row
+colnames(ahrb_cor) <- numeric_col
+
+ab_cor_plt <- corrplot(ahrb_cor , method = "color", tl.cex = .6, diag = TRUE)
+ab_cor_plt
+```
+
+### Pairplots
+
+Distribution and plots of data points between two variables for NAcc and Insula pairs.
+
+```{r message=FALSE, warning=FALSE}
+ggpairs(ahrb_df[,nacc_pairs]) + theme_minimal()
+ggpairs(ahrb_df[,insula_pairs]) + theme_minimal()
+```
+
+### Bivariate: r > .85
+
+Check if any and which exceed r > .85
+
+```{r}
+# rerun to have original names: 
+ahrb_cor = cor(ahrb_df[,mod_vars]) 
+
+# Diagonal are all 1's, convert to 0 to avoid confusion
+diag(ahrb_cor) <- 0
+
+# Find indices of correlations exceeding 0.84 on in upper.tri or lower.tri (otherwise redundant)
+ahrb_high_index <- which(ahrb_cor > 0.85 | ahrb_cor < -0.85, arr.ind = TRUE)
+
+# Print the correlations that exceed 0.84
+ahrbcor_rownames = row.names(ahrb_cor)
+ahrbcor_colnames = colnames(ahrb_cor)
+
+# loop through which indices exceed the corr, print value and save name to list
+n2_exceed = 0
+ahrb_exceedlist = list()
+for (i in 1:nrow(ahrb_high_index)) {
+  n2_exceed = n2_exceed+1
+  row <- ahrb_high_index[i, 1]
+  col <- ahrb_high_index[i, 2]
+  correlation <- ahrb_cor[row, col]
+  print(paste(n2_exceed,"-", ahrbcor_rownames[row], "~", ahrbcor_colnames[col], "r:", round(correlation,3)))
+  ahrb_exceedlist[n2_exceed] <- paste(ahrbcor_rownames[row], "~", ahrbcor_colnames[col])
+}
+
+# after running, clean environment of uneccessary vars
+rm(row,col,correlation,i)
+```
+
+Of the **`r (length(mod_vars)^2 - length(mod_vars))/2`** unique correlations, the AHRB study has **`r n2_exceed`** correlations that are r > .85
+
+## *MLS*
+
+Run the correlation matrix and plot heatmap. Then, check whether an correlations exceed the Stage 1 specificed > .85
+
+
+### Correlations
+
+Next, just like for ABCD/AHRB, for MLS calculate correlation matrix only for MID model variables (i.e., `mod_vars`)
+
+```{r}
+# correlation matrix only of the data specified for MID model
+mls_cor = cor(mls_df[,mod_vars]) 
+
+# Create table
+row.names(mls_cor) <- numstr_modrow_names
+colnames(mls_cor) <- numstr_modcol_names
+kable(as.data.frame(mls_cor), booktabs = TRUE) %>%
+  kable_styling(font_size = 8,position = 'center')
+
+# Numeric only for plot
+rownames(mls_cor) <- numeric_row
+colnames(mls_cor) <- numeric_col
+
+m_cor_plt <- corrplot(mls_cor, method = "color", tl.cex = .6)
+m_cor_plt
+```
+
+### Pairplots
+
+Distribution and plots of data points between two variables for NAcc and Insula pairs.
+
+```{r message=FALSE, warning=FALSE}
+ggpairs(mls_df[,nacc_pairs]) + theme_minimal()
+ggpairs(mls_df[,insula_pairs]) + theme_minimal()
+```
+
+### Bivariate: r > .85
+
+Check if any and which exceed r > .85
+
+```{r}
+# rerun to have original names: 
+mls_cor = cor(mls_df[,mod_vars]) 
+
+# Diagonal are all 1's, convert to 0 to avoid confusion
+diag(mls_cor) <- 0
+
+any(mls_cor > 0.85)
+
+# Find indices of correlations exceeding 0.84
+mls_high_index <- which(mls_cor > 0.85 | mls_cor < -0.85, arr.ind = TRUE)
+
+# Print the correlations that exceed 0.84
+mlscor_rownames = row.names(mls_cor)
+mlscor_colnames = colnames(mls_cor)
+
+# loop through which indices exceed the corr, print value and save name to list
+n3_exceed = 0
+mls_exceedlist = list()
+for (i in 1:nrow(mls_high_index)) {
+  n3_exceed = n3_exceed+1
+  row <- mls_high_index[i, 1]
+  col <- mls_high_index[i, 2]
+  correlation <- mls_cor[row, col]
+  print(paste(n3_exceed,"-", mlscor_rownames[row], "~", mlscor_colnames[col], "r:", round(correlation,3)))
+  mls_exceedlist[n3_exceed] <- paste(mlscor_rownames[row], "~", mlscor_colnames[col])
+}
+
+# after running, clean environment of uneccessary vars
+rm(row,col,correlation,i)
+```
+
+Of the **`r (length(mod_vars)^2 - length(mod_vars))/2`** unique correlations, the AHRB study has **`r n3_exceed`** correlations that are r > .85
+
+## Aggregated Samples
+
+rerun the above but on the combined data. Combining using `rbind` but emitted some non-matching variables that are unique to ABCD
+### Correlation Plot
+
+For MLS/AHRB combined data, calculate correlation matrix for MID model variables (i.e., `mod_vars`)
+
+```{r}
+# correlation matrix only of the data specified for MID model
+brain_comb_corr = cor(brain_set[,mod_vars]) 
+
+# Create table
+row.names(brain_comb_corr) <- numstr_modrow_names
+colnames(brain_comb_corr) <- numstr_modcol_names
+kable(brain_comb_corr, booktabs = TRUE) %>%
+  kable_styling(font_size = 8,position = 'center')
+
+# numeric
+rownames(brain_comb_corr) <- numeric_row
+colnames(brain_comb_corr) <- numeric_col
+
+corrplot(brain_comb_corr, method = "color", tl.cex = .6, diag = TRUE)
+```
+
+
+
+### Intersection corrs exceed/below 
+
+Below, we aggregate the correlations that => .85 acros the samples. 
+```{r}
+exceed_intersect = intersect(abcd_exceedlist, ahrb_exceedlist)
+exceed_intersect = intersect(mls_exceedlist,exceed_intersect)
+
+cat(paste(length(exceed_intersect), "items exceed r .85 in ABCD, AHRB and MLS, they are: ", paste(exceed_intersect, collapse = ", ")))
+```
+
+
+# CFA Analyses {.tabset}
+
+In this section, the CFA and Multigroup CFA analyses are performed. The registered report used simulated data. Below, cfa() is fit to data using the aprior model. The fit statistics are extracted to describe how the `population model` fits the `empirical data`.
+
+## Specify MID CFA Model
+
+Per the correlations that exceed .85, `r paste(exceed_intersect, collapse = ", ")`
+
+The following parameters are fixed (pre-multiplied, as example given [here](https://lavaan.ugent.be/tutorial/syntax2.html)) in the pre-specified population [theoretical] model:
+
+ - AWin_v_Neut_L_NAc_r1 ~ BWin_v_Neut_L_NAc_r1 (a)
+ - BWin_v_Neut_L_NAc_r2 ~ AWin_v_Neut_L_NAc_r2 (b)
+ - BWin_v_Neut_R_Ins_r1 ~ AWin_v_Neut_R_Ins_r1 (c)
+ - BWin_v_Neut_R_Ins_r2 ~ AWin_v_Neut_R_Ins_r2 (d)
+ - AWin_v_Neut_R_NAc_r2 ~ BWin_v_Neut_R_NAc_r2 (e)
+
+
+
+```{r}
+mid_model <-"
+# Factor loadings
+Approach =~ BWin_v_BLose_L_NAc_r1 + BWin_v_BLose_R_NAc_r1 +
+            a*AWin_v_Neut_L_NAc_r1  + AWin_v_Neut_R_NAc_r1  + c*AWin_v_Neut_R_Ins_r1 +
+            a*BWin_v_Neut_L_NAc_r1  + BWin_v_Neut_R_NAc_r1  + c*BWin_v_Neut_R_Ins_r1 +
+            b*AWin_v_Neut_L_NAc_r2  + e*AWin_v_Neut_R_NAc_r2  + d*AWin_v_Neut_R_Ins_r2 +
+            b*BWin_v_Neut_L_NAc_r2  + e*BWin_v_Neut_R_NAc_r2  + d*BWin_v_Neut_R_Ins_r2 +
+            BWin_v_BLose_L_NAc_r2 + BWin_v_BLose_R_NAc_r2 
+                
+Avoid =~    BLose_v_Neut_L_Ins_r1 + BLose_v_Neut_R_Ins_r1 +
+            BLose_v_BWin_L_Ins_r1 + BLose_v_BWin_R_Ins_r1 +
+            ALose_v_Neut_L_Ins_r2 + ALose_v_Neut_R_Ins_r2 +
+            BLose_v_Neut_L_Ins_r2 + BLose_v_Neut_R_Ins_r2 +
+            ALose_v_Neut_L_Ins_r1 + ALose_v_Neut_R_Ins_r1 +
+            BLose_v_BWin_L_Ins_r2 + BLose_v_BWin_R_Ins_r2 
+
+# covariance between factors   
+Approach ~~ Avoid
+"
+
+```
+
+
+## Strict CFA
+
+Below is the CFA model that is used to test the proposed restricted model (see Figure 1 in the manuscript). The CFA fitting procedure is consistent with the description [here](https://lavaan.ugent.be/tutorial/cfa.html). 
+A CFA model is estimated for the complete data (i.e., all three datasets). The `std.lv= = FALSE` constrains the latent factor variances to *1*. The estimator being used is `ML`, maximum-likelihood  estimator. 
+
+Below, the proposed `strict model` is ran on the combined samples. In other words, all of the data are combined and a CFA model is fit assuming all structure, loadings and vairances are equal.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+all_sample <- cfa(model = mid_model, data = brain_set,
+               estimator = "ML", std.lv = FALSE, meanstructure = TRUE)
+
+```
+
+
+## Configural MG-CFA
+
+Here, the `configular multigroup model` is fit. As described in [D'Urso et al. (2022)](www.doi.org/10.31234/osf.io/n3f5u) In measurement invariance, the configural model tests: 
+
+___is the structure of the factors invariant across the samples (data sets). In other words, if an *a priori* two-factor structure is assumed (FA 1 = approach and FA 2 = Avoidance), is this two factor structure which represents the between-person variability in the items reflecting the factors consistent across the samples?___
+
+If the variability in one sample suggests a one, three, or four factor structure, this will be degrade the fit statistics. A pre-specified CFA model is used to evaluate whether the manifest variables that reflect the factor are the same across groups. This is less restrictive than the strict CFA model, as it only imposed structural constraints.
+
+```{r message=TRUE, warning=FALSE}
+configural_cfa <- cfa(model = mid_model, data = brain_set, group = 'set', 
+                      estimator = "ML", std.lv = FALSE, meanstructure = TRUE)
+```
+
+## Metric MG-CFA
+
+After fitting the CFA configurial (factor structure) invariance, if the model fit is not poor, then the next step is to test the metric invariance. [Given the configural model has poor fit, this is only fit here for reporting but not interpretation purposes as the model will inevitabily be poor fit].
+
+Metric invariance tests: 
+
+___are the loadings consistent across the groups. In other words, are the phenomena (i.e., approach and avoidance) reflected by the same pattern of item loadings?___
+
+One cause for concern may be that the phenomenon are not invariant across age groups. Or, the items/measures (ROIs for a given contrast) do not load in the same manner onto each factor. This 'soft' measure of invariance can determine whether the items function differently across the samples and so cannot be easily compared. 
+
+The model is fit using the same procedure as for configurial invariance with one exception: In metric invariance the loadings group equality constraint is added to the model via `group.equal=c("loadings")`. 
+
+```{r}
+metric_cfa <-cfa(model = mid_model, data = brain_set, 
+                 group = 'set', group.equal=c("loadings"),
+                 estimator = "ML", std.lv = FALSE, meanstructure = TRUE)
+```
+
+
+
+## Extract Fit CFA
+
+Fit statistics are extracted out and saved into the `out` data frame: 
+
+  - Model Name, 
+  - Chi-square statistics, 
+  - Model Degrees of Freedom (df), 
+  - Model p-value, 
+  - RMSEA, 
+  - CFI, 
+  - SRMR, 
+  - AIC, 
+  - BIC
+  
+```{r}
+# Below selects specific fit data as described in Maassen et al. 2019 OSF. No comparisons are made to compare models at this point.
+out <- matrix(NA, ncol = 10, nrow = 4)
+colnames(out) <- c(" ","χ2","DF","p-value", "RMSEA", "SRMR", "TLI","CFI", "AIC", "BIC")
+# save fit measures from models
+out[1,2:8] <- round(data.matrix(
+  fitmeasures(all_sample, fit.measures = c("chisq","df","pvalue","rmsea", "srmr", "tli", "cfi"))), digits=2)
+out[2,2:8] <- round(data.matrix(
+  fitmeasures(configural_cfa, fit.measures = c("chisq","df","pvalue","rmsea", "srmr", "tli", "cfi"))),  digits=2)
+out[3,2:8] <- round(data.matrix(
+  fitmeasures(metric_cfa,fit.measures = c("chisq","df","pvalue","rmsea", "srmr", "tli", "cfi"))), digits=2)
+
+# AIC models
+out[1,9] <- round(AIC(all_sample),0)
+out[2,9] <- round(AIC(configural_cfa),0)
+out[3,9] <- round(AIC(metric_cfa),0)
+# BIC models
+out[1,10] <- round(BIC(all_sample),0)
+out[2,10] <- round(BIC(configural_cfa),0)
+out[3,10] <- round(BIC(metric_cfa),0)
+out[1:3,1] <-  c("Overall CFA", "Configg MG-CFA", "Metric MG-CFA")
+```
+
+### Summary: Model Parameters
+
+Reporting standardized coefficients for three models:
+
+- Strict [combined data] Model
+- Configural Model: Structure constraint across groups (samples)
+- Metric Model: structure + loadings constraint across groups (samples)
+
+#### Strict CFA Model
+
+```{r}
+##### Summarizing All Samples CFA model #####
+#parameters(all_sample, standardize = T)
+allsample_params = data.frame(parameters(all_sample, standardize = T)) %>% 
+  slice(1:29) %>% 
+  select(-c("z","Component","CI_low","CI_high")) %>% 
+  rename("Fixed" = Label, "β" = Coefficient)
+
+allsample_params$p <- if_else(allsample_params$p < .001, "< .001", 
+                           if_else(allsample_params$p < .01, "< .01", 
+                                   if_else(allsample_params$p < .05, "< .05", "> .05")))
+allsample_params[,4:5] <- round(allsample_params[,c(4:5)],2)
+
+# Report table
+kable(allsample_params, booktabs = TRUE) %>%
+  kable_styling(font_size = 12, position = 'center',html_font = "Times New Roman")
+```
+
+#### Configural CFA Model 
+
+```{r}
+##### Summarizing Configural MG-CFA model #####
+parameters(configural_cfa, standardize = T)
+
+config_params = data.frame(parameters(configural_cfa, standardize = T)) %>% 
+  slice(1:29) %>% 
+  select(-c("z","Component","Group","CI_low","CI_high")) %>% 
+  rename("Fixed" = Label, "β" = Coefficient)
+
+config_params$p <- if_else(config_params$p < .001, "< .001", 
+                           if_else(config_params$p < .01, "< .01", 
+                                   if_else(config_params$p < .05, "< .05", "> .05")))
+config_params[,4:5] <- round(config_params[,c(4:5)],2)
+
+# Report table
+kable(config_params, booktabs = TRUE) %>%
+  kable_styling(font_size = 12,position = 'center',html_font = "Times New Roman")
+```
+
+#### Metric CFA model 
+
+```{r}
+##### Summarizing Metric Multi-group CFA model #####
+parameters(metric_cfa, standardize = T)
+
+metric_params = data.frame(parameters(metric_cfa, standardize = T)) %>% 
+  slice(1:29) %>% 
+  select(-c("z","Component","Group","CI_low","CI_high")) %>% 
+  rename("Fixed" = Label, "β" = Coefficient)
+
+metric_params$p <- if_else(metric_params$p < .001, "< .001", 
+                           if_else(metric_params$p < .01, "< .01", 
+                                   if_else(metric_params$p < .05, "< .05", "> .05")))
+metric_params[,4:5] <- round(metric_params[,c(4:5)],2)
+
+# Report table
+kable(metric_params, booktabs = TRUE) %>%
+  kable_styling(font_size = 12,position = 'center',html_font = "Times New Roman")
+```
+
+## ANOVA: Comparing models 
+
+
+### Strict v Configural
+
+The below compares whether the combined data (across all three samples) in the `all_cfa` (strict, comined data) model is significantly improved by the configural invariance model (relaxing all constraints, item loadings, intercepts and residual variances, except factor structure). A significant value indicates that the reduction in the chi-square statistic is meaningfully different between the two models the model with lower BIC is a better fit.
+
+```{r}
+anova(all_sample, configural_cfa)
+```
+
+
+
+## Plot Configural MG-CFA
+
+Use [semPaths](https://www.rdocumentation.org/packages/semPlot/versions/1.1.6/topics/semPaths) to plot the configural invariance CFA multigroup model
+
+```{r}
+# this plottinig is not function with runs loading onto ROIs
+
+layout(t(1:3))
+semPaths(configural_cfa,
+         color = "lightyellow",
+         theme="colorblind",
+         whatLabels = "std",
+         style = "lisrel",
+         sizeLat = 10,
+         sizeLat2 = 10,
+         sizeMan = 6,
+         edge.color = "steelblue",
+         edge.label.cex = 2,
+         label.cex = 2,
+         rotation = 2,
+         layout = "tree2",
+         intercepts = TRUE,
+         residuals = FALSE,
+         #residScale = 10,
+         curve = 2,
+         title = T,
+         title.color = "black",
+         cardinal = "lat cov",
+         curvePivot = T,
+         nCharNodes = 6,
+         #nodeLabels = label,
+         mar = c(1,3,1,3))
+```
+
+# Exploratory SEM {.tabset}
+
+Exploratory Structural Equation Modeling (ESEM): As described in March et al. (2014), create a target rotation for items onto factors. First, to keep consistent with the Stage 1 Registered report extract the variable names:
+
+```{r}
+esem_data = brain_set[,c("AWin_v_Neut_L_NAc_r1"  ,"AWin_v_Neut_L_NAc_r2" ,
+                         "BWin_v_Neut_L_NAc_r1"  ,"BWin_v_Neut_L_NAc_r2" ,
+                         "BWin_v_BLose_L_NAc_r1" ,"BWin_v_BLose_L_NAc_r2",
+                          "AWin_v_Neut_R_NAc_r1" , "AWin_v_Neut_R_NAc_r2",
+                          "BWin_v_Neut_R_NAc_r1" , "BWin_v_Neut_R_NAc_r2",
+                          "BWin_v_BLose_R_NAc_r1", "BWin_v_BLose_R_NAc_r2",
+                         # Ins values apprach 
+                         "AWin_v_Neut_R_Ins_r1","AWin_v_Neut_R_Ins_r2", 
+                         "BWin_v_Neut_R_Ins_r1","BWin_v_Neut_R_Ins_r2", 
+                         # avoidance
+                         "ALose_v_Neut_L_Ins_r1","ALose_v_Neut_L_Ins_r2",
+                         "BLose_v_Neut_L_Ins_r1","BLose_v_Neut_L_Ins_r2",
+                         "BLose_v_BWin_L_Ins_r1","BLose_v_BWin_L_Ins_r2",
+                         "ALose_v_Neut_R_Ins_r1","ALose_v_Neut_R_Ins_r2",
+                         "BLose_v_Neut_R_Ins_r1","BLose_v_Neut_R_Ins_r2",
+                         "BLose_v_BWin_R_Ins_r1","BLose_v_BWin_R_Ins_r2",
+                         "set")]
+```
+
+
+## Targets/Anchor/Model
+
+In this case two factors are specified by the CFA model, so factor 1 and factor 2 are specified in `make_target`.
+
+```{r}
+target_rot <- make_target(28,mainloadings = list(f1 = 1:16, f2 = 17:28))
+esem.efa <- esem_efa(data = esem_data[,1:28], nfactors = 2,
+                     target = target_rot, fm = "ml")
+
+esem.efa$loadings
+```
+
+Using item that loads highest on factor 1 and lowest on factor 2 and vice versa, and define as anchor using `find_referents`
+
+```{r}
+# per the example from Mateus Silverstrin, need to define anchor for each factor (value to loads highers on 1 factor and lowest on other)
+anchor <- find_referents(efa_object = esem.efa,
+                         factor_names = c("f1","f2"))
+```
+
+Once the esem efa and anchors are defined, use `syntax_composer` to specify the esem model. This will produce a lavaan specified model that references starting values that will be used in the cfa model
+```{r}
+# Pull starting parameters
+esem_mid_model <- syntax_composer(efa_object = esem.efa, referents = anchor)
+```
+
+## Run ESEM 
+
+### Print model
+
+The starting values are printed below to provide reference for how starting values differ from a strict CFA model. Notice, how some values that were originally not fit onto the Approach factor (f1), such as big lose contrasts, they are now specified with loading values that are between .05 to -.05.
+
+```{r}
+cat(esem_mid_model)
+```
+
+
+### Run full ESEM  
+
+After the EFA loadings are extracted using a target rotation, starting values are now available. These are now used to specify a less restrictive CFA model
+
+```{r}
+esem_mid_fit<- cfa(esem_mid_model, esem_data[,1:28], 
+                  estimator = "ML", std.lv = FALSE, 
+                  meanstructure = TRUE, check.gradient = FALSE)
+
+```
+
+## Extract Fit ESEM
+
+Pull and add fit statistics to the `out` dataframe and print results to see decreases in AIC/BIC
+```{r}
+# adding values to the CFA model fit indices
+out[4,2:8] <- round(data.matrix(
+  fitmeasures(esem_mid_fit, fit.measures = c("chisq","df","pvalue","rmsea", "srmr", "tli", "cfi"))), digits=2)
+out[4,9] <- round(AIC(esem_mid_fit),0)
+out[4,10] <- round(BIC(esem_mid_fit),0)
+out[4,1] <-  c("Overall ESEM")
+```
+
+## ANOVA: Strct v Strict ESEM
+
+compared strict esem model versus strict model. The model fit suggests that the combined sample CFA model (-7594) is a better fit of the data than the over-parametized ESEM model (BIC -8011). 
+
+```{r}
+anova(all_sample, esem_mid_fit)
+```
+
+
+# Table: CFA + ESEM Fit Stats
+
+Reporting the complete set of fit statistics from to the overall CFA (combined data, strict model), the Configural CFA model, the Metric CFA model and the overall ESEM model (combined data). 
+
+```{r}
+kable(as.data.frame(out), booktabs = TRUE) %>%
+  kable_styling(font_size = 12,position = 'center',html_font = "Times New Roman")
+```
+
+# EFA Model {.tabset}
+
+## Identify # Factors
+
+Using [fa.parallel](https://www.rdocumentation.org/packages/psych/versions/2.3.6/topics/fa.parallel) package to perform a [parallel analysis](www.doi.org/10.1080/00273170902938969) to derive the recommended factors for the EFA model for each sample. To avoid biasing due different calculations across packages RE: recommendation factors, also using [nFactors](https://www.rdocumentation.org/packages/nFactors/versions/2.4.1.1/topics/nScree) and the [paran package](https://CRAN.R-project.org/package=paran). BIC estimates are also extracted to evaluate when they plateau. The statistics are used in aggregate to inform the final factor # for each sample.
+
+### *ABCD* factors
+
+```{r}
+set.seed(111)
+# fa parallel
+fa.parallel(abcd_df[,mod_vars], fm = 'ml') # https://cran.r-project.org/web/packages/nFactors/nFactors.pdf
+
+# nFactors
+plot(nScree(x=abcd_df[,mod_vars], 
+            cor = TRUE, model="factors"))
+
+# paran(
+paran(abcd_df[,mod_vars],
+      iterations = 1000, quietly = FALSE, centile = 95, 
+      status = FALSE, all = TRUE, cfa = TRUE, graph = TRUE, color = TRUE, 
+      col = c("black", "red", "blue"), lty = c(1, 2, 3), lwd = 1, legend = TRUE, 
+      seed = 100)
+
+# BIC
+rec_factors <- matrix(NA, ncol = 2, nrow = 14)
+colnames(rec_factors) <- c("Nfactors","BIC")
+
+for (f in 1:14) {
+  test_fac <- fa(abcd_df[,mod_vars],
+                 nfactors = f, 
+                 rotate = "promax", fm = "ml")
+  rec_factors[f,1] <- f
+  rec_factors[f,2] <-test_fac$BIC
+}
+
+bic_fact = as.data.frame(rec_factors)
+
+lowest_bic <- which.min(bic_fact$BIC)
+
+bic_fact %>% 
+  ggplot(aes(x = Nfactors, y = BIC)) +
+  geom_line(colour = 'black', linetype = 'dashed') +
+  geom_vline(xintercept = bic_fact$Nfactors[lowest_bic], colour = 'red')+
+  theme_minimal()
+```
+
+### *AHRB* factors
+
+```{r}
+set.seed(111)
+# fa parallel
+fa.parallel(ahrb_df[,mod_vars], fm = 'ml') # https://cran.r-project.org/web/packages/nFactors/nFactors.pdf
+
+# nFactors
+plot(nScree(x=ahrb_df[,mod_vars], model="factors"))
+
+# paran(
+paran(ahrb_df[,mod_vars],
+      iterations = 1000, quietly = FALSE, centile = 95, 
+      status = FALSE, all = TRUE, cfa = TRUE, graph = TRUE, color = TRUE, 
+      col = c("black", "red", "blue"), lty = c(1, 2, 3), lwd = 1, legend = TRUE, 
+      seed = 100)
+
+# BIC
+rec_factors <- matrix(NA, ncol = 2, nrow = 14)
+colnames(rec_factors) <- c("Nfactors","BIC")
+
+for (f in 1:14) {
+  test_fac <- fa(ahrb_df[,mod_vars],
+                 nfactors = f, 
+                 rotate = "promax", fm = "ml")
+  rec_factors[f,1] <- f
+  rec_factors[f,2] <-test_fac$BIC
+}
+
+bic_fact = as.data.frame(rec_factors)
+
+lowest_bic <- which.min(bic_fact$BIC)
+
+bic_fact %>% 
+  ggplot(aes(x = Nfactors, y = BIC)) +
+  geom_line(colour = 'black', linetype = 'dashed') +
+  geom_vline(xintercept = bic_fact$Nfactors[lowest_bic], colour = 'red')+
+  theme_minimal()
+```
+
+### *MLS* factors
+
+```{r}
+set.seed(111)
+# fa parallel
+fa.parallel(mls_df[,mod_vars], fm = 'ml') 
+
+# nFactors
+plot(nScree(mls_df[,mod_vars], model="factors"))
+
+# paran(
+paran(mls_df[,mod_vars],
+      iterations = 1000, quietly = FALSE, centile = 95, 
+      status = FALSE, all = TRUE, cfa = TRUE, graph = TRUE, color = TRUE, 
+      col = c("black", "red", "blue"), lty = c(1, 2, 3), lwd = 1, legend = TRUE, 
+      seed = 100)
+
+# BIC
+rec_factors <- matrix(NA, ncol = 2, nrow = 14)
+colnames(rec_factors) <- c("Nfactors","BIC")
+
+for (f in 1:14) {
+  test_fac <- fa(mls_df[,mod_vars],
+                 nfactors = f, 
+                 rotate = "promax", fm = "ml")
+  rec_factors[f,1] <- f
+  rec_factors[f,2] <-test_fac$BIC
+}
+
+bic_fact = as.data.frame(rec_factors)
+
+lowest_bic <- which.min(bic_fact$BIC)
+
+bic_fact %>% 
+  ggplot(aes(x = Nfactors, y = BIC)) +
+  geom_line(colour = 'black', linetype = 'dashed') +
+  geom_vline(xintercept = bic_fact$Nfactors[lowest_bic], colour = 'red')+
+  theme_minimal()
+```
+
+
+
+## Run EFA 
+
+Used the (factanal)[https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/factanal] to run EFA model. Specifying the number of factors and using the `promax` (non-orthogonal) rotation w/ `Maximum Likelihood Estimator`.
+
+```{r}
+efa_rownames = c(
+  #Nacc
+  "1. R1: All Win > $0 L-NAc", "2. R1: All Win > $0 R-NAc",
+  "3. R2: All Win > $0 L-NAc", "4. R2: All Win > $0 R-NAc",
+  "5. R1: Big Win > $0 L-NAc", "6. R1: Big Win > $0 R-NAc",
+  "7. R2: Big Win > $0 L-NAc", "8. R2: Big Win > $0 R-NAc",
+  "9. R1: Big Win > Big Lose L-NAc", "10. R1: Big Win > Big Lose R-NAc",
+  "11. R2: Big Win > Big Lose L-NAc","12. R2: Big Win > Big Lose R-NAc",
+  # Ins
+  "13. R1: All Win > $0 R-Ins", "14. R2: All Win > $0 R-Ins",
+  "15. R1: Big Win > $0 R-Ins", "16. R2: Big Win > $0 R-Ins",
+  "17. R1: All Lose > $0 L-Ins", "18. R1: All Lose > $0 R-Ins",
+  "19. R2: All Lose > $0 L-Ins", "20. R2: All Lose > $0 R-Ins",
+  "21. R1: Big Lose > $0 L-Ins", "22. R1: Big Lose > $0 R-Ins",
+  "23. R2: Big Lose > $0 L-Ins", "24. R2: Big Lose > $0 R-Ins",
+  "25. R1: Big Lose > Big Win L-Ins", "26. R1: Big Lose > Big Win R-Ins",
+  "27. R2: Big Lose > Big Win L-Ins", "28. R2: Big Lose > Big Win R-Ins"
+)
+```
+
+### **ABCD** EFA
+
+```{r echo=TRUE}
+abcd_factors = 6
+
+abcd_efa = fa(abcd_df[,mod_vars], nfactors = abcd_factors,
+              rotate = 'Promax', fm = 'ml')
+
+abcd_colnames = paste("AD",1:abcd_efa$factors)
+
+colnames(abcd_efa$loadings) <- abcd_colnames
+model_parameters(abcd_efa)
+
+factor_corr_abcd = abcd_efa$Phi
+colnames(factor_corr_abcd) = paste("AD",1:abcd_efa$factors)
+rownames(factor_corr_abcd) = paste("AD",1:abcd_efa$factors)
+factor_corr_abcd
+```
+
+
+remove loadings <20 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# dont print values below .20
+abcd_loadings_thresh <- abcd_efa$loadings[, 1:abcd_factors]
+abcd_loadings_thresh[abs(abcd_loadings_thresh) < .20] <- NA
+rownames(abcd_loadings_thresh) <- efa_rownames
+
+heatmaply(round(abcd_loadings_thresh,2) %>% print(sort = T),
+          colors = c("#ca0000","white","#3182bd"),
+          
+           dendrogram = "none",
+           xlab = "", ylab = "", 
+           main = "",
+           margins = c(60,100,40,20),
+           grid_color = "white",
+           grid_width = 0.00001,
+           titleX = FALSE,
+           hide_colorbar = FALSE,
+           branches_lwd = 0.1,
+           fontsize_row = 14, fontsize_col = 14,
+           labCol = colnames(abcd_loadings_thresh),
+           labRow = rownames(abcd_loadings_thresh),
+           heatmap_layers = theme(axis.line=element_blank()),
+          
+)
+
+
+```
+
+### **AHRB** EFA
+
+```{r echo=TRUE}
+ahrb_factors = 6
+
+ahrb_efa = fa(ahrb_df[,mod_vars], nfactors = ahrb_factors,
+              rotate = 'Promax', fm = 'ml')
+
+ahrb_colnames = paste0("AB", 1:ahrb_efa$factors)
+
+colnames(ahrb_efa$loadings) <- paste("AB", 1:abcd_efa$factors)
+
+# extract correlation matrix of residuals?
+model_parameters(ahrb_efa)
+
+# factor corr 
+factor_corr_ahrb = ahrb_efa$Phi
+colnames(factor_corr_ahrb) = paste("AB",1:ahrb_efa$factors)
+rownames(factor_corr_ahrb) = paste("AB",1:ahrb_efa$factors)
+factor_corr_ahrb
+```
+
+
+remove <.20 loadings and reorder to match ABCD order
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# reorder factors to maps ABCD order:
+ahrb_efa_loadings_rev <- ahrb_efa$loadings[,c(2,1,4,3,6,5)]
+
+# dont print values below .20
+ahrb_loadings_thresh <- ahrb_efa_loadings_rev[, 1:ahrb_factors]
+ahrb_loadings_thresh[abs(ahrb_loadings_thresh) < .30] <- NA
+
+rownames(ahrb_loadings_thresh) <- efa_rownames
+
+heatmaply(round(ahrb_loadings_thresh,2) %>% print(sort = T),
+          colors = c("#ca0000","white","#3182bd"),
+               dendrogram = "none",
+               xlab = "", ylab = "", 
+               main = "",
+               margins = c(60,100,40,20),
+               grid_color = "white",
+               grid_width = 0.00001,
+               titleX = FALSE,
+               hide_colorbar = FALSE,
+               branches_lwd = 0.1,
+               label_names = c("Brain:", "Feature:", "Value"),
+               fontsize_row = 14, fontsize_col = 14,
+               labCol = colnames(ahrb_loadings_thresh),
+               labRow = rownames(ahrb_loadings_thresh),
+               heatmap_layers = theme(axis.line=element_blank()),
+          
+)
+```
+
+
+### **MLS** EFA
+
+```{r echo=TRUE}
+mls_factors = 7
+
+mls_efa = fa(mls_df[,mod_vars], nfactors = mls_factors,
+              rotate = 'Promax', fm = 'ml')
+
+mls_colnames = paste0("MS", 1:mls_efa$factors)
+
+colnames(mls_efa$loadings) <- mls_colnames
+model_parameters(mls_efa)
+
+# factor corr
+factor_corr_mls = mls_efa$Phi
+colnames(factor_corr_mls) = paste("AB",1:mls_efa$factors)
+rownames(factor_corr_mls) = paste("AB",1:mls_efa$factors)
+factor_corr_mls
+```
+
+remove <.20 loadings and reorder to match ABCD order
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# reorder factors to maps ABCD order:
+mls_efa_loadings_rev <- mls_efa$loadings[,c(4,3,2,1,5,7,6)]
+# dont print values below .20
+mls_loadings_thresh <- mls_efa_loadings_rev[, 1:mls_factors]
+mls_loadings_thresh[abs(mls_loadings_thresh) < .30] <- NA
+
+rownames(mls_loadings_thresh) <- efa_rownames
+
+heatmaply(round(mls_loadings_thresh,2) %>% print(sort = T),
+         #scale_fill_gradient_fun = ggplot2::scale_fill_gradient2(
+         #       low = "darkred", 
+         #       high = "blue",
+         #       space = "Lab",
+         #       midpoint = 0, 
+         #       limits = c(-1, 1)
+         #     ),
+         
+          colors = c("#ca0000","white","#3182bd"),
+               dendrogram = "none",
+               xlab = "", ylab = "", 
+               main = "",
+               margins = c(60,100,40,20),
+               grid_color = "white",
+               grid_width = 0.00001,
+               titleX = FALSE,
+               hide_colorbar = FALSE,
+               branches_lwd = 0.1,
+               label_names = c("Brain:", "Feature:", "Value"),
+               fontsize_row = 14, fontsize_col = 14,
+               col_names = colnames(mls_loadings_thresh),
+               labRow = rownames(mls_loadings_thresh),
+               heatmap_layers = theme(axis.line=element_blank())
+) 
+```
+
+## Factor Congruence
+
+Calculating a coefficient of factor congruence across the three samples' EFA models. Using function [fa.congruence](https://search.r-project.org/CRAN/refmans/psych/html/factor.congruence.html)
+
+```{r}
+abcd_revised <- c("AD1","AD2","AD3","AD4","AD5","AD6")
+fa_cong_table = fa.congruence(x = list(abcd_efa,ahrb_efa,mls_efa), digits = 2) 
+
+# rename rows/columns to improve interpretability
+
+colnames(fa_cong_table) <- c(abcd_revised,ahrb_colnames,mls_colnames)
+rownames(fa_cong_table) <- c(abcd_revised,ahrb_colnames,mls_colnames)
+fa_cong_table %>% 
+  knitr::kable(
+    caption = "Factor Congruence: ABCD, AHRB & MLS EFA",
+    booktabs = TRUE
+    )
+corrplot(fa_cong_table, method = "color", tl.cex = .8, type = "lower")
+
+# relabeled MS1 = MS4 | MS2 = AD3 | MS3 = AD2 | MS4 = AD1 | MS5 = AD6 | MS6 = AD2
+
+ahrb_revised <- c("AB2","AB1","AB4","AB3","AB6","AB5")
+mls_revised <- c("MS4","MS3","MS2","MS1","MS6","MS5","MS7")
+colnames(fa_cong_table) <- c(abcd_revised,ahrb_revised,mls_revised)
+rownames(fa_cong_table) <- c(abcd_revised,ahrb_revised,mls_revised)
+fa_cong_table %>% 
+  knitr::kable(
+    caption = "Factor Congruence: ABCD, AHRB & MLS EFA",
+    booktabs = TRUE
+    )
+corrplot(fa_cong_table, method = "color", tl.cex = .8, type = "lower")
+```
+
+# Local SEM {.tabset}
+
+
+Running CFA for the pubertal variables in the ABCD sample using the local SEM framework described in [Olaru et al (2020)](https://psyarxiv.com/q79c5/) implemented using the [sirt package](https://www.rdocumentation.org/packages/sirt/versions/3.12-66)
+
+## Specify Models
+
+Specifying the model for the ABCD data below. Apply the EFA CFA from first n = 1000 ABCD sample in the held out second n = 1000 ABCD sample. Vary across Pubertal Developmental Scale. Use a parsiomnious model (e.g., FA loadings > .30). Again, fixing parameters exceeding ~ .85. Also, specifying theoretically plausible correlated residuals: within run + region similar signal
+
+```{r}
+abcd_efa_residuals <- cor(data.frame(round(abcd_efa$residual,4)))
+abcd_efa_residuals[abs(abcd_efa_residuals) < 0.60] <- 0
+
+# plot/print matrix
+as.matrix(abcd_efa_residuals) %>% 
+  knitr::kable(
+    caption = "First1k: ABCD Residuals Cov Matrix",
+    booktabs = TRUE
+    )
+corrplot(as.matrix(abcd_efa_residuals), method = "shade", tl.cex = .4)
+```
+
+```{r}
+set.seed(111)
+lsem_model <-"
+# Factor loadings
+Avoid_Insula_r2 =~ AWin_v_Neut_R_Ins_r2 + BWin_v_Neut_R_Ins_r2 + ALose_v_Neut_L_Ins_r2 + ALose_v_Neut_R_Ins_r2 + BLose_v_Neut_L_Ins_r2 + ALose_v_Neut_R_Ins_r2*BLose_v_Neut_R_Ins_r2
+
+Appr_NAcc_r2 =~ AWin_v_Neut_L_NAc_r2 + AWin_v_Neut_R_NAc_r2 + BWin_v_Neut_L_NAc_r2 +
+        AWin_v_Neut_R_NAc_r2*BWin_v_Neut_R_NAc_r2 + BWin_v_BLose_L_NAc_r2 + BWin_v_BLose_R_NAc_r2
+
+Avoid_Insula_r1 =~ AWin_v_Neut_R_Ins_r1 + BWin_v_Neut_R_Ins_r1 + ALose_v_Neut_L_Ins_r1 + ALose_v_Neut_R_Ins_r1 
+          + BLose_v_Neut_L_Ins_r1 + ALose_v_Neut_R_Ins_r1*BLose_v_Neut_R_Ins_r1
+
+Appr_NAcc_r1 =~ AWin_v_Neut_L_NAc_r1 + AWin_v_Neut_R_NAc_r1 + AWin_v_Neut_L_NAc_r1*BWin_v_Neut_L_NAc_r1 + 
+        BWin_v_Neut_R_NAc_r1 + BWin_v_BLose_L_NAc_r1 + BWin_v_BLose_R_NAc_r1
+
+
+## Correlated residuals
+## Nacc
+AWin_v_Neut_L_NAc_r1 ~~  BWin_v_Neut_L_NAc_r1
+AWin_v_Neut_L_NAc_r2 ~~  BWin_v_Neut_L_NAc_r2 
+AWin_v_Neut_R_NAc_r1 ~~  BWin_v_Neut_R_NAc_r1 
+AWin_v_Neut_R_NAc_r2 ~~  BWin_v_Neut_R_NAc_r2
+## Insula
+AWin_v_Neut_R_Ins_r1 ~~  BWin_v_Neut_R_Ins_r1
+AWin_v_Neut_R_Ins_r2 ~~  BWin_v_Neut_R_Ins_r2
+"
+```
+
+```{r}
+heldout_cfa <- cfa(model = lsem_model, data = abcd_df2,
+                   estimator = "ML", std.lv = FALSE, meanstructure = TRUE)
+
+```
+
+```{r}
+model_parameters(heldout_cfa, standardize = TRUE)
+
+cat("Chi-sq, DF, p-value, rmsea, srmr, tli and cfi statistics heldout:", 
+    round(fitmeasures(heldout_cfa, fit.measures = c("chisq","df","pvalue","rmsea", "srmr", "tli", "cfi")), digits=2)
+)
+
+```
+
+## run LSEM
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+lsem.MID_par <- sirt::lsem.estimate(data = abcd_df2, moderator = 'p_puberty', # moderator variable
+                                moderator.grid = seq(1,5,1), # moderator levels, PDS 1 - 5
+                                lavmodel = lsem_model, # model
+                                h = 2, # bandwidth parameter 
+                                residualize = FALSE, # allow mean level differences 
+                                sufficient_statistics = TRUE,
+                                std.lv = TRUE
+                                )
+
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+lsem.MID_yth <- sirt::lsem.estimate(data = abcd_df2, moderator = 'y_puberty', # moderator variable
+                                moderator.grid = seq(1,5,1), # moderator levels, PDS 1 - 5
+                                lavmodel = lsem_model, # model
+                                h = 2, # bandwidth parameter 
+                                residualize = FALSE, # allow mean level differences 
+                                sufficient_statistics = TRUE,
+                                std.lv = TRUE
+                                )
+```
+
+
+## Summary LSEM
+
+Summarizing output of the `lsem.estimate` parents
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+summary(lsem.MID_par)
+```
+
+Summarizing output of the `lsem.estimate` youth
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+summary(lsem.MID_yth)
+```
+
+## Permutation Test LSEM
+
+Running permutation test of LSEM model. N = 1000 bootstraps
+
+### parent
+```{r message=FALSE, warning=FALSE, include=FALSE}
+set.seed(1111)
+n_permutations = 1000
+lsem.permuted_par <- sirt::lsem.permutationTest(lsem.object = lsem.MID_par,
+                                            B = n_permutations, # permutations 
+                                            residualize = FALSE) 
+```
+
+```{r echo=TRUE, fig.height=14, fig.width=9, message=FALSE, warning=FALSE}
+plot(lsem.permuted_par,type = "global",title = "Global Statistics for Parent PDS")
+summary(lsem.permuted_par)# examine results
+```
+
+
+### youth
+```{r message=FALSE, warning=FALSE, include=FALSE}
+set.seed(1111)
+lsem.permuted_yth <- sirt::lsem.permutationTest(lsem.object = lsem.MID_yth,
+                                            B = n_permutations, # permutations 
+                                            residualize = FALSE) 
+
+```
+
+```{r echo=TRUE, fig.height=14, fig.width=9, message=FALSE, warning=FALSE}
+plot(lsem.permuted_yth,type = "global",title = "Global Statistics for Youth PDS")
+summary(lsem.permuted_yth) # examine results
+```
+
+## Plot LSEM
+
+
+
+Plotting the `lsem.estimate` sig for selected indices, parents
+```{r}
+plot(lsem.MID_par, parindex=c(3,4,6, # not significant
+                              12, # significant
+                              63:69))
+```
+
+Plotting the `lsem.estimate` sig for selected indices, youth
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+plot(lsem.MID_yth, parindex=c(3,4,6, #significant
+                              12, # not significant
+                              63:69))
+```
+
+# Sensitivity Analyses {.tabset}
+
+In the manuscript, several sensitivity analyses are proposed:
+
+1. Differences (CFA/EFA) in effects across data collected only at UM site. 
+2. Resampling of CFA/EFA in effects across larger ABCD data to evaluate the *stability* of model effects
+3. Invariance across sex at birth
+
+
+## UM Specific CFA/ESEM/EFA
+
+ UM Only data
+```{r}
+um_only = rbind(ahrb_df,mls_df)
+```
+
+
+### CFA
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+um_allsample <- cfa(model = mid_model, data = um_only,
+                     estimator = "ML", std.lv = FALSE, meanstructure = TRUE)
+
+um_config_cfa <- cfa(model = mid_model, data = um_only, group = 'set',
+                     estimator = "ML", std.lv = FALSE, meanstructure = TRUE)
+
+um_metric_cfa <-cfa(model = mid_model, data = um_only,
+                    group = 'set', group.equal=c("loadings"),
+                    estimator = "ML", std.lv = FALSE, meanstructure = TRUE)
+
+umsite_out <- matrix(NA, ncol = 10, nrow = 3)
+colnames(umsite_out) <- c("model","chisq","df","pvalue", "rmsea", "cfi", "srmr", "tli",
+                   "AIC", "BIC")
+
+# save fit measures from models
+umsite_out[1,2:8] <- round(data.matrix(fitmeasures(um_allsample, 
+                                            fit.measures = c("chisq","df","pvalue",
+                                                             "rmsea", "cfi", "srmr", "tli"))), 
+                    digits=3)
+
+umsite_out[2,2:8] <- round(data.matrix(fitmeasures(um_config_cfa, 
+                                            fit.measures = c("chisq","df","pvalue",
+                                                             "rmsea", "cfi", "srmr","tli"))), 
+                            digits=3)
+
+umsite_out[3,2:8] <- round(data.matrix(fitmeasures(um_metric_cfa, 
+                                            fit.measures = c("chisq","df","pvalue",
+                                                             "rmsea", "cfi", "srmr","tli"))), 
+                    digits=3)
+
+umsite_out[1,9] <- round(AIC(um_allsample),3)
+umsite_out[2,9] <- round(AIC(um_config_cfa),3)
+umsite_out[3,9] <- round(AIC(um_metric_cfa),3)
+
+# BIC models
+umsite_out[1,10] <- round(BIC(um_allsample),3)
+umsite_out[2,10] <- round(BIC(um_config_cfa),3)
+umsite_out[3,10] <- round(BIC(um_metric_cfa),3)
+
+umsite_out[1:3,1] <-  c("Overall CFA", "Config MG-CFA", "Metric MG-CFA")
+
+```
+
+```{r}
+umsite_out %>% 
+  knitr::kable(
+    caption = "Fit statistics from MG-CFA and ESEM models",
+    booktabs = TRUE,align = 'c'
+    )
+```
+
+### EFA
+
+In this case, only the data for the ABCD sample changes (reduced from 21 --> 1 site [UM]). Hence, rerunning only the ABCD EFA. Factor congruence estimation will use EFA from above for AHRB and MLS.
+
+**Did not run UM only ABCD sample. GE data not available, hence no site-13**
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+paran(x = um_only[,mod_vars],
+      iterations = 1000, quietly = FALSE, centile = 95, 
+      status = FALSE, all = TRUE, cfa = TRUE, graph = TRUE, color = TRUE, 
+      col = c("black", "red", "blue"), lty = c(1, 2, 3), lwd = 1, legend = TRUE, 
+      seed = 100)
+plot(nScree(x=um_only[,mod_vars],model="factors"))
+
+```
+
+```{r eval=FALSE, warning=FALSE, include=FALSE}
+um_factors = 6
+um_abcd_efa = fa(um_only[,mod_vars], nfactors = abcd_factors,
+             rotate = 'Promax', fm = 'ml')
+um_abcd_colnames = paste("AD", 1:um_abcd_efa$factors)
+colnames(um_abcd_efa$loadings) <- um_abcd_colnames
+model_parameters(um_abcd_efa)
+```
+
+```{r eval=FALSE, include=FALSE}
+umonly_loadings_thresh <- um_abcd_efa$loading[, 1:um_factors]
+umonly_loadings_thresh[abs(umonly_loadings_thresh) < .20] <- NA
+rownames(umonly_loadings_thresh) <- c(
+  #Nacc
+  "1. R1: All Win > $0 L-NAc", "2. R1: All Win > $0 R-NAc",
+  "3. R2: All Win > $0 L-NAc", "4. R2: All Win > $0 R-NAc",
+  "5. R1: Big Win > $0 L-NAc", "6. R1: Big Win > $0 R-NAc",
+  "7. R2: Big Win > $0 L-NAc", "8. R2: Big Win > $0 R-NAc",
+  "9. R1: Big Win > Big Lose L-NAc", "10. R1: Big Win > Big Lose R-NAc",
+  "11. R2: Big Win > Big Lose L-NAc","12. R2: Big Win > Big Lose R-NAc",
+  # Ins
+  "13. R1: All Win > $0 R-Ins", "14. R2: All Win > $0 R-Ins",
+  "15. R1: Big Win > $0 R-Ins", "16. R2: Big Win > $0 R-Ins",
+  "17. R1: All Lose > $0 L-Ins", "18. R1: All Lose > $0 R-Ins",
+  "19. R2: All Lose > $0 L-Ins", "20. R2: All Lose > $0 R-Ins",
+  "21. R1: Big Lose > $0 L-Ins", "22. R1: Big Lose > $0 R-Ins",
+  "23. R2: Big Lose > $0 L-Ins", "24. R2: Big Lose > $0 R-Ins",
+  "25. R1: Big Lose > Big Win L-Ins", "26. R1: Big Lose > Big Win R-Ins",
+  "27. R2: Big Lose > Big Win L-Ins", "28. R2: Big Lose > Big Win R-Ins"
+)
+heatmaply(round(umonly_loadings_thresh) %>% print(sort = T),
+          scale_fill_gradient_fun = ggplot2::scale_fill_gradient2(
+                 low = "blue", 
+                 high = "darkred", 
+                 space = "Lab",
+                 midpoint = 0, 
+                 limits = c(-1, 1)
+               ),
+               dendrogram = "none",
+               xlab = "", ylab = "", 
+               main = "",
+               margins = c(60,100,40,20),
+               grid_color = "white",
+               grid_width = 0.00001,
+               titleX = FALSE,
+               hide_colorbar = FALSE,
+               branches_lwd = 0.1,
+               label_names = c("Brain:", "Feature:", "Value"),
+               fontsize_row = 9, fontsize_col = 9,
+               labCol = colnames(umonly_loadings_thresh),
+               labRow = rownames(umonly_loadings_thresh),
+               heatmap_layers = theme(axis.line=element_blank()),
+          
+)
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+fa_cong_um = fa.congruence(x = list(ahrb_efa,mls_efa), digits = 2) 
+
+# rename rows/columns to improve interpretability
+
+colnames(fa_cong_um) <- c(ahrb_colnames,mls_colnames)
+rownames(fa_cong_um) <- c(ahrb_colnames,mls_colnames)
+fa_cong_um %>% 
+  knitr::kable(
+    caption = "Factor Congruence: AHRB & MLS EFA",
+    booktabs = TRUE
+    )
+corrplot(fa_cong_um, method = "color", tl.cex = .8, type = "lower")
+
+```
+
+
+
+## Resampling ABCD CFA/EFA
+
+
+For resampling of the CFA model, using [bootstrapLavaan](https://rdrr.io/cran/lavaan/man/bootstrap.html) for lavaan. First fitting the cfa model, then creating 1000 bootstrapped sampled and extracting fit statistics
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1111)
+boot_cfa <- cfa(model = mid_model, data = abcd_df2,
+                 estimator = "ML", std.lv = FALSE, meanstructure = TRUE)
+
+out_cfaboot <- bootstrapLavaan(object = boot_cfa, R = 1000, 
+                               FUN = fitMeasures,
+                               fit.measures=c("chisq","rmsea","cfi",
+                                              "tli","srmr","AIC","BIC"),
+                               parallel="multicore", ncpus=4)
+
+cfaboot_df <- data.frame(out_cfaboot)
+```
+
+
+For the resampling of the EFA model, using [sample_n](https://dplyr.tidyverse.org/reference/sample_n.html) to get [300] samples of N = 300 (w/ replacement) of ABCD data. Then, estimating recommended N of factors per paralell analysis. Saving this to dataframe
+```{r message=FALSE, warning=FALSE}
+# create empty df where data will be saved and compiled for models
+#resampled_cfa <- matrix(NA, ncol = 11, nrow = 50) # resampling 50x for Config + #Metric models
+#colnames(resampled_cfa) <- c("Sample",
+#                              "chisq","df","pvalue", 
+#                              "rmsea","cfi","tli","srmr","AIC","BIC","Factors")
+#
+#n_loop = 50
+
+sample_size = 300
+
+resampled_cfa <- matrix(NA, ncol = 2, nrow = sample_size) # resampling 50x for Config + Metric models
+colnames(resampled_cfa) <- c("Sample","Factors")
+
+  
+for (s in 1:sample_size) {
+  
+  sub_df <- sample_n(tbl = abcd_df2[,mod_vars], size = sample_size, replace = TRUE)
+  
+  resampled_cfa[s,1] <- s
+
+  val <- nScree(x=sub_df[,mod_vars],model="factors")
+  resampled_cfa[s,2] <- as.integer(val$Components[3])
+  
+
+}
+
+resampled_res <- data.frame(resampled_cfa)
+```
+
+Plotting the mean + 95% Confidence interval of values
+
+```{r message=FALSE, warning=FALSE}
+n = nrow(out_cfaboot)
+
+ci_plt1 <- cfaboot_df %>% 
+  gather(key = "FitIndex", value = "Statistic",
+         srmr,rmsea) %>% 
+  dplyr::group_by(FitIndex) %>% 
+  dplyr::summarize(m = mean(Statistic), stdev = sd(Statistic)) %>% 
+  ggplot(aes(x =FitIndex, y = m, fill = FitIndex, color=FitIndex)) +
+  geom_point()+
+  geom_errorbar(aes(ymin=m-(1.96*stdev/sqrt(n)),
+                    ymax=m+(1.96*stdev/sqrt(n))), 
+                width=.2,
+                position=position_dodge(0.05))+
+  labs(
+    title = 'CFA: RMSEA & SRMR',
+    x = 'Fit Stats',
+    y = 'Type',
+  )+
+  theme_minimal()
+
+
+ci_plt2 <- cfaboot_df %>% 
+  gather(key = "FitIndex", value = "Statistic",
+         cfi,tli) %>% 
+  dplyr::group_by(FitIndex) %>% 
+  dplyr::summarize(m = mean(Statistic), stdev = sd(Statistic)) %>% 
+  ggplot(aes(x =FitIndex, y = m, fill = FitIndex, color=FitIndex)) +
+  geom_point()+
+  geom_errorbar(aes(ymin=m-(1.96*stdev/sqrt(n)),
+                    ymax=m+(1.96*stdev/sqrt(n))), 
+                width=.2,
+                position=position_dodge(0.05))+
+  labs(
+    title = 'CFA: CFI & TLI',
+    x = 'Fit Stats',
+    y = 'Type',
+  )+
+  theme_minimal()
+
+
+ci_plt3 <- cfaboot_df %>% 
+  gather(key = "FitIndex", value = "Statistic",
+         aic,bic) %>% 
+  dplyr::group_by(FitIndex) %>% 
+  dplyr::summarize(m = mean(Statistic), stdev = sd(Statistic)) %>% 
+  ggplot(aes(x =FitIndex, y = m, fill = FitIndex, color=FitIndex)) +
+  geom_point()+
+  geom_errorbar(aes(ymin=m-(1.96*stdev/sqrt(n)),
+                    ymax=m+(1.96*stdev/sqrt(n))), 
+                width=.2,
+                position=position_dodge(0.05))+
+  labs(
+    title = 'CFA: AIC & BIC',
+    x = 'Fit Stats',
+    y = 'Type',
+  )+
+  theme_minimal()
+
+
+ci_plt4 = resampled_res %>%
+  dplyr::summarize(m = mean(Factors), stdev = sd(Factors)) %>% 
+  ggplot(aes(x ="", y = m)) +
+  geom_point()+
+  geom_errorbar(aes(ymin=m-(1.96*stdev/sqrt(n)),
+                    ymax=m+(1.96*stdev/sqrt(n))), 
+                width=.2,
+                position=position_dodge(0.05))+
+  ylim(0,10)+
+  labs(
+    title = 'EFA Factors',
+    x = '',
+    y = 'Number of Factors',
+  )+
+  theme_minimal()
+
+ci_plt1;ci_plt2;ci_plt3;ci_plt4
+```
+
+
+Plotting the distribution of values
+
+```{r message=FALSE, warning=FALSE}
+# srmr/rmsea
+avg_rmsea = round(mean(cfaboot_df$rmsea),3)
+sd_rmsea = round(sd(cfaboot_df$rmsea),3)
+avg_srmr = round(mean(cfaboot_df$srmr),3)
+sd_srmr = round(sd(cfaboot_df$srmr),3)
+
+plt1 <- cfaboot_df %>% 
+  gather(key = "FitIndex", value = "Statistic",
+         srmr,rmsea) %>% 
+  ggplot(aes(x =FitIndex, y = Statistic, fill = FitIndex, color=FitIndex)) +
+  ggdist::stat_halfeye(adjust = .5, width = .7, .width = 0, justification = -.2, 
+                       point_colour = NA, alpha = .5) +
+  geom_boxplot(width = .2, outlier.shape = NA, alpha = .3) + 
+  geom_jitter(width = .05, alpha = .5) +
+  theme_minimal()+
+  labs(
+    title = 'CFA: RMSEA & SRMR',
+    subtitle = paste("Mean RMSEA:",avg_rmsea, "(SD:",sd_srmr,")",
+                     "Mean SRMR:",avg_srmr, "(SD:",sd_srmr,")"),
+    x = 'Fit Stats',
+    y = 'Type',
+  )
+
+# cfi/tli
+avg_cfi = round(mean(cfaboot_df$cfi),3)
+sd_cfi = round(sd(cfaboot_df$cfi),3)
+avg_tli = round(mean(cfaboot_df$tli),3)
+sd_tli = round(sd(cfaboot_df$tli),3)
+
+plt2 = cfaboot_df %>% 
+  gather(key = "FitIndex", value = "Statistic",
+         cfi,tli) %>% 
+  ggplot(aes(x =FitIndex, y = Statistic, fill = FitIndex, color=FitIndex)) +
+  ggdist::stat_halfeye(adjust = .5, width = .7, .width = 0, justification = -.2, 
+                       point_colour = NA, alpha = .5) +
+  geom_boxplot(width = .2, outlier.shape = NA, alpha = .3) + 
+  geom_jitter(width = .05, alpha = .5) +
+  theme_minimal()+
+  labs(
+    title = 'CFA: CFI & TLI',
+    subtitle = paste("Mean CFI:",avg_cfi, "(SD:",sd_cfi,")",
+                     "Mean TLI:",avg_tli, "(SD:",sd_tli,")"),
+    x = 'Fit Stats',
+    y = 'Type',
+  )
+
+# aic/bic
+avg_aic = round(mean(cfaboot_df$aic),2)
+sd_aic = round(sd(cfaboot_df$aic),2)
+avg_bic = round(mean(cfaboot_df$bic),2)
+sd_bic = round(sd(cfaboot_df$bic),2)
+
+plt3 = cfaboot_df %>% 
+  gather(key = "FitIndex", value = "Statistic",
+         aic,bic) %>% 
+  ggplot(aes(x =FitIndex, y = Statistic, fill = FitIndex, color=FitIndex)) +
+  ggdist::stat_halfeye(adjust = .5, width = .7, .width = 0, justification = -.2, 
+                       point_colour = NA, alpha = .5) +
+  geom_boxplot(width = .2, outlier.shape = NA, alpha = .3) + 
+  geom_jitter(width = .05, alpha = .5) +
+  theme_minimal()+
+  labs(
+    title = 'CFA: AIC & BIC',
+    subtitle = paste("Mean AIC:",avg_aic, "(SD:",sd_aic,")",
+                     "Mean BIC:",avg_bic, "(SD:",sd_bic,")"),
+    x = 'Fit Stats',
+    y = 'Type',
+  )
+
+
+avg = round(mean(resampled_res$Factors),1)
+minimum = min(resampled_res$Factors)
+maximum = max(resampled_res$Factors)
+
+plt4 = resampled_res %>%
+  ggplot(aes(x ="", y = Factors)) +
+  ggdist::stat_halfeye(adjust = .5, width = .7, .width = 0, justification = -.2, 
+                       point_colour = NA, alpha = .5) +
+  geom_jitter(width = .05, alpha = .5) +
+  theme_minimal()+
+  labs(
+    title = 'EFA: Parallel Analysis Recommended Factors',
+    subtitle = paste("Mean:",avg," [Min:", minimum, "Max:", maximum,"]"),
+    x = 'Fit Stats',
+    y = 'Type',
+  )
+
+plt1;plt2;plt3;plt4
+```
+
+
+## Invariance for sex at birth
+
+```{r message=FALSE, warning=FALSE}
+sex_config <- cfa(model = lsem_model, data = abcd_df2, group = 'sex', 
+                      estimator = "ML", std.lv = FALSE, meanstructure = TRUE)
+
+model_parameters(sex_config, standardize = TRUE)
+round(
+  fitmeasures(
+    sex_config, fit.measures = c("chisq","df","pvalue","rmsea", "srmr", "tli", "cfi")
+    ), digits=2)
+```
+
+Output parameters for the model
+```{r}
+sex_params = data.frame(parameters(sex_config, standardize = T)) %>% 
+  slice(1:29) %>% 
+  select(-c("z","Component","Group","CI_low","CI_high")) %>% 
+  rename("Fixed" = Label, "β" = Coefficient)
+
+sex_params$p <- if_else(sex_params$p < .001, "< .001", 
+                           if_else(sex_params$p < .01, "< .01", 
+                                   if_else(sex_params$p < .05, "< .05", "> .05")))
+sex_params[,4:5] <- round(sex_params[,c(4:5)],2)
+
+# Report table
+kable(sex_params, booktabs = TRUE) %>%
+  kable_styling(font_size = 12,position = 'center',html_font = "Times New Roman")
+```
+
+
+ANOVA comparing the strict CFA model versus the sex configural CFA model, model improve or not?
+
+```{r}
+anova(heldout_cfa, sex_config)
+```
+
+## Effect of ABCD N on model fits
+
+```{r}
+# combined data
+combined_abcd = rbind(abcd_df[,-58],abcd_df2)
+```
+
+```{r message=FALSE, warning=FALSE}
+
+# set size
+min = 50
+max = 1000
+interval = 10
+
+# matrix 
+out <- as.data.frame(matrix(NA, ncol = 12, nrow = length(seq(min,max,interval))))
+colnames(out) <- c("N","χ2","DF","p-value", "RMSEA", "SRMR", "TLI","CFI", "AIC", "BIC","EFA_Factors","BIC2")
+
+# loop
+counter = 0
+set.seed(112233)
+for (size in seq(min, max, interval)) {
+  counter = counter + 1
+  sub_df <- sample_n(tbl = combined_abcd[,mod_vars], size = size, replace = TRUE)
+  
+  # cfa fit
+  full_sample_cfa <- cfa(model = mid_model, data = sub_df,
+                         estimator = "ML", std.lv = FALSE, meanstructure = TRUE, check.gradient = FALSE)
+  # efa factors check
+  n_fact <- nScree(x=sub_df,model="factors")
+  
+  
+  # save outputs
+  out[counter,1] <- size
+  out[counter,2:8] <- round(data.matrix(
+    fitmeasures(full_sample_cfa, fit.measures = c("chisq","df","pvalue","rmsea", "srmr", "tli", "cfi"))), digits=2)
+  out[counter,9] <- round(AIC(full_sample_cfa),0)
+  out[counter,10] <- round(BIC(full_sample_cfa),0)
+  out[counter,11] <- n_fact$Components[3] # parallel analysis
+  out[counter,12] <- round(data.matrix(
+    fitmeasures(full_sample_cfa, fit.measures = c("bic2"))), digits=2)
+  
+}
+
+```
+
+```{r}
+ggplot(out, aes(x = N)) +
+  geom_line(aes(y = RMSEA, color = "RMSEA")) +
+  geom_line(aes(y = SRMR, color = "SRMR")) +
+  scale_color_manual(values = c("RMSEA" = "blue", "SRMR" = "red")) +
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1, by = .2))+
+  labs(x = "Sample Size (N)", y = "RMSEA & SRMR") +
+  theme_minimal()
+
+
+ggplot(out, aes(x = N)) +
+  geom_line(aes(y = TLI, color = "TLI")) +
+  geom_line(aes(y = CFI, color = "CFI")) +
+  scale_color_manual(values = c("TLI" = "blue", "CFI" = "red")) +
+  labs(x = "Sample Size (N)", y = "TLI & CFI") +
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1, by = .2))+
+  theme_minimal()
+
+
+ggplot(out, aes(x = N)) +
+  geom_line(aes(y = AIC, color = "AIC")) +
+  geom_line(aes(y = BIC, color = "BIC")) +
+  scale_color_manual(values = c("AIC" = "blue", "BIC" = "red")) +
+  labs(x = "Sample Size (N)", y = "AIC, BIC") +
+  xlim(min,max)+
+  theme_minimal()
+
+
+ggplot(out, aes(x = N)) +
+  geom_line(aes(y = EFA_Factors, color = "EFA_Factors")) +
+  labs(x = "Sample Size (N)", y = "Parallel Analysis: N Factors") +
+  scale_y_continuous(limits = c(1,10), breaks = seq(1,10, by = 1))+
+  xlim(min,max)+
+  guides(color = "none")+
+  theme_minimal()
+```
+
+
+```{r message=FALSE, warning=FALSE}
+layout(t(1:2))
+semPaths(sex_config,
+         color = "lightgrey",
+         theme="colorblind",
+         whatLabels = "std",
+         style = "lisrel",
+         sizeLat = 6,
+         sizeLat2 =6,
+         sizeMan = 8,
+         edge.color = "steelblue",
+         edge.label.cex = 1.2,
+         label.cex = 1.2,
+         rotation = 4,
+         layout = "tree2",
+         intercepts = FALSE,
+         residuals = FALSE,
+         #residScale = 10,
+         curve = 2,
+         title = T,
+         title.color = "black",
+         cardinal = "lat cov",
+         curvePivot = T,
+         nCharNodes = 6,
+         #nodeLabels = label,
+         mar = c(3,4,3,4))
+```
+
+
+# Posthoc Checks {.tabset}
+
+The posthoc checks include the correlation matrices separated by runs for the model relevant variables. As well as run-by-run correlation + distribution plots across samples
+
+## Pairwise scatter plots run1 run 2
+
+### ABCD
+```{r}
+abcd_run <- pivot_longer(abcd_df[,mod_vars], 
+                        cols = matches("_r[1-2]$"), 
+                        names_to = c(".value", "Run"), 
+                        names_pattern = "(.*)_(r[1-2])$")
+
+abcd_r1 = abcd_run %>% 
+  filter(Run == 'r1') %>% 
+  select(matches(gsub("_r[1-2]$", "", mod_vars))) 
+abcd_r2 = abcd_run %>% 
+  filter(Run == 'r2') %>% 
+  select(matches(gsub("_r[1-2]$", "", mod_vars))) 
+
+corrplot(cor(abcd_r1), method = "color", tl.pos = "ld", type = "lower", tl.cex = .6, title = "ABCD Run 1", mar = c(0,0,1,0))
+corrplot(cor(abcd_r2), method = "color", tl.pos = "ld", type = "lower", tl.cex = .6, title = "ABCD Run 2", mar = c(0,0,1,0))
+```
+```{r message=FALSE, warning=FALSE}
+
+label_nacc = c("AWin_v_Neut_L_NAc_r1","BWin_v_Neut_L_NAc_r1","AWin_v_Neut_L_NAc_r2","BWin_v_Neut_L_NAc_r2")
+label_ins = c("AWin_v_Neut_L_Ins_r1","BWin_v_Neut_L_Ins_r1","AWin_v_Neut_L_Ins_r2","BWin_v_Neut_L_Ins_r2")
+
+ggpairs(abcd_df[,label_nacc]) + theme_minimal()
+ggpairs(abcd_df[,label_ins]) + theme_minimal()
+```
+
+### AHRB
+
+```{r}
+ahrb_run <- pivot_longer(ahrb_df[,mod_vars], 
+                        cols = matches("_r[1-2]$"), 
+                        names_to = c(".value", "Run"), 
+                        names_pattern = "(.*)_(r[1-2])$")
+ahrb_r1 = ahrb_run %>% 
+  filter(Run == 'r1') %>% 
+  select(matches(gsub("_r[1-2]$", "", mod_vars))) 
+ahrb_r2 = ahrb_run %>% 
+  filter(Run == 'r2') %>% 
+  select(matches(gsub("_r[1-2]$", "", mod_vars))) 
+
+corrplot(cor(ahrb_r1), method = "color", tl.pos = "ld", type = "lower", tl.cex = .6, title = "AHRB Run 1", mar = c(0,0,1,0))
+corrplot(cor(ahrb_r2), method = "color", tl.pos = "ld", type = "lower", tl.cex = .6, title = "AHRB Run 1", mar = c(0,0,1,0))
+```
+```{r message=FALSE, warning=FALSE}
+ggpairs(ahrb_df[,label_nacc]) + theme_minimal()
+ggpairs(ahrb_df[,label_ins]) + theme_minimal()
+```
+
+### MLS
+
+```{r}
+mls_run <- pivot_longer(mls_df[,mod_vars], 
+                        cols = matches("_r[1-2]$"), 
+                        names_to = c(".value", "Run"), 
+                        names_pattern = "(.*)_(r[1-2])$")
+
+mls_r1 = mls_run %>% 
+  filter(Run == 'r1') %>% 
+  select(matches(gsub("_r[1-2]$", "", mod_vars))) 
+mls_r2 = mls_run %>% 
+  filter(Run == 'r2') %>% 
+  select(matches(gsub("_r[1-2]$", "", mod_vars))) 
+
+corrplot(cor(mls_r1), method = "color", tl.pos = "ld", type = "lower", tl.cex = .6, title = "MLS Run 1", mar = c(0,0,1,0))
+corrplot(cor(mls_r2), method = "color", tl.pos = "ld", type = "lower", tl.cex = .6, title = "MLS Run 1", mar = c(0,0,1,0))
+```
+
+```{r message=FALSE, warning=FALSE}
+ggpairs(mls_df[,label_nacc]) + theme_minimal()
+ggpairs(mls_df[,label_ins]) + theme_minimal()
+```
+
+
+# Reproducing CFA/EFA models {.tabset}
+
+Providing the covariance matrices, the means and standard deviations for the manifest [28] model variables so the above CFA/ESEM/EFA data can be reproduced for modeling purposes. Doing separately for the ABCD, AHRB and MLS.
+
+## ABCD
+
+### Primary
+
+The covariance matrices for the [28] manifest variables for the primary ABCD primary dataset that has `N observations`: `r nrow(abcd_df)`
+```{r}
+abcd_cov = cov(abcd_df[,mod_vars])
+abcd_means = data.frame(means = colMeans(abcd_df[,mod_vars]))
+abcd_sd = data.frame(sds = sapply(abcd_df[,mod_vars], sd))
+abcd_dat = cbind(abcd_cov, abcd_means, abcd_sd)
+
+kable(abcd_dat, booktabs = TRUE) %>%
+  kable_styling(font_size = 12,position = 'center',html_font = "Times New Roman")
+```
+
+### Held-out
+
+The covariance matrices for the [28] manifest variables for the primary ABCD held-out primary dataset that has `N observations`: `r nrow(abcd_df)`
+```{r}
+abcd_cov = cov(abcd_df2[,mod_vars])
+abcd_means = data.frame(means = colMeans(abcd_df2[,mod_vars]))
+abcd_sd = data.frame(sds = sapply(abcd_df2[,mod_vars], sd))
+abcd_dat = cbind(abcd_cov, abcd_means, abcd_sd)
+
+kable(abcd_dat, booktabs = TRUE) %>%
+  kable_styling(font_size = 12,position = 'center',html_font = "Times New Roman")
+```
+
+## AHRB
+
+The covariance matrices for the [28] manifest variables for the primary AHRB dataset that has `N observations`: `r nrow(ahrb_df)`
+```{r}
+ahrb_cov = cov(ahrb_df[,mod_vars])
+ahrb_means = data.frame(means = colMeans(ahrb_df[,mod_vars]))
+ahrb_sd = data.frame(sds = sapply(ahrb_df[,mod_vars], sd))
+ahrb_dat = cbind(ahrb_cov, ahrb_means, ahrb_sd)
+
+kable(ahrb_dat, booktabs = TRUE) %>%
+  kable_styling(font_size = 12,position = 'center',html_font = "Times New Roman")
+```
+
+## MLS
+
+The covariance matrices for the [28] manifest variables for the MLS dataset that has `N observations`: `r nrow(mls_df)`
+```{r}
+mls_cov = cov(mls_df[,mod_vars])
+mls_means = data.frame(means = colMeans(mls_df[,mod_vars]))
+mls_sd = data.frame(sds = sapply(mls_df[,mod_vars], sd))
+mls_dat = cbind(mls_cov, mls_means, mls_sd)
+
+kable(mls_dat, booktabs = TRUE) %>%
+  kable_styling(font_size = 12,position = 'center',html_font = "Times New Roman")
+```
+

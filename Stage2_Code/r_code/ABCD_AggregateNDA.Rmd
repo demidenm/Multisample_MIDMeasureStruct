@@ -1,0 +1,300 @@
+---
+title: "DCN - Aggregating NDA"
+author: "<h3>by Michael Demidenko</h3>"
+date: "`r format(Sys.time(), '%B %Y')`"
+output:
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    number_sections: yes
+    toc_depth: 2
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+    code_folding: hide
+    self_contained: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+tags: []
+subtitle: <h2><u>Multi-sample measurement invar </u></h2>
+---
+# Project Description
+
+This project is based in the Stage 1 registered report Demidenko et al [2022](https://osf.io/a6t8k). During the registered reported, the study proposed to use a sub-sample of the full yr 2 ABCD sample. This includes 1000 participants for the initial analysis and a held out 1000 participants for the follow-up LSEM/EFA model.
+
+To do this, we first have to subsample 1000 x 2 ABCD data from which we will perform QC to get our final sample. First, it is necessary to pull the relevant basic demo (age, sex, race) and relevant MRI information for the *MID task*. For the latter, this includes information about the consortium rated quality that will be used to cross reference with the MRIQC output. Second, this is used to cross-reference with the available [ABCC-ABCD](https://collection3165.readthedocs.io/en/stable/) BIDS derived data to achieve our final ABCD samples to be used in the analyses. The imaging and ABCC is covered in this [ABCD ReproNim course](https://www.youtube.com/watch?v=I7Y6jmDMDlE).  
+
+
+QC metrics form the ABCD DAIRC. Quality of data is evaluated for completeness and errors that may have occurred during the scan. The manual review includes:
+
+- binary QC, reject/accept
+- types of artifacts reviewed for T1/T2/DWI motion, intensity inhomogeneity, white matter underestimation, pial overestimation, magnetic susceptivility artifact; 0-3, abset, mild, moderate or severe
+  - for fMRI, accept/reject, B0 warping, head coverage, registration to t1
+  
+ABCD recommended exclusion from tabulated data:
+
+T1 data: 
+- raw QC (mrqcrp102; iqc_t1_ok_ser > 0)
+- FreeSurfer QC not failed (freeqc01; fsqc_qc ~= 0)
+
+T2 data: 
+- rawQC (mriqcrp102, iqc_t2_ok_ser > 0)
+- t1 raq QC
+- Free surfer not failed (freesqc01; fsqc_qc ~= 0)
+-T2w registration to T1w, less than 10 (abcd_auto_postqc01; apqc_smri_t2w_regt1_rigid < 10)
+
+MID task data
+- MID tsfMRI rawQC (mriqcrp102; iqc_mid_ok_ser > 0)
+- T1 series passed raw QC (mriqcrp102; iqc_t1_ok_ser > 0)
+- MID behavior passed (abcd_mid02; tfmri_mid_beh_performflag ==1)
+- MID degrees of freedm > 200 (midaparc03' tmfri_mid_all_b_dof > 200)
+- MID e-prime time atch or ignore e-prime mismatch (mriqcrp302; iqc_mid_ep_t_series_match == 1 || eprime_mismatch_ok_mid ==1)
+- fmri B0 unwarp available (abcd_auto_postqc01l apqc_fmri_bounward_flag == 1)
+- FreeSurfer QC not afiled (feesqc01; fsqc_qc ~=0)
+- fMRI manual post-process QC not failed (fmriqc01; fmri_postqc_qc ~= 0)
+- fMRI registration to T1w less than 19 (abcd_auto_postqc01; apqc_fmri_regt1_rigid < 19)
+- fMRI maximum dorsal cutoff score (abcd_auto_postqc01; apqc_fmri_fov_cutoff_dorsal < 65)
+- fmri maximum ventral cutoff score less than 60 (abcd_auto_postqc01; apqc_fmri_fov_cutoff_ventral < 60)
+  
+
+
+
+Some basic information is below RE: use of and interpreting R commands.
+
+* Base R [cheatsheets](https://www.povertyactionlab.org/sites/default/files/r-cheat-sheet.pdf) 
+* Using [Tabsets](https://bookdown.org/yihui/rmarkdown-cookbook/html-tabs.html)
+
+
+***
+***
+
+# Prepare data {.tabset}
+
+```{r message=FALSE, warning=FALSE}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse)
+```
+
+## Aggregate function 
+
+Here we use code from `Mike Angstadt`, available on [github](https://github.com/mangstad/Misc_utils/blob/master/abcd_functions.R) which uses an R [function](https://www.tutorialspoint.com/r/r_functions.htm) to aggregate data across text files from the downloaded ABCD [data repository](https://nda.nih.gov/abcd). 
+`read.abcd` function readings in the files, tab separated, skipping 1 row and not including descriptives. It pulls remaining data and columns into table. Then, `multi.merge` takes in different dataframes that consistent of important text files and joins then `by` specified variables (we focus on subject key and event name, as these are consistent (or should be) across the .txt files).
+
+```{r message=FALSE, warning=FALSE}
+read.abcd = function(file, sep="\t",skip=1,cols=NULL,descriptions=FALSE) {
+  headers = names(read.table(file,sep=sep,header=T,stringsAsFactors=F)[-1,])
+  if (descriptions) {
+    descrip = names(read.table(file,sep=sep,header=T,stringsAsFactors=F,skip=1))
+  }
+  data = read.table(file,sep=sep,header=T,stringsAsFactors=F,skip=skip)
+  names(data) = headers
+  if (!is.null(cols)) {
+    data = subset(data,select=cols)
+  }
+  if (descriptions) {
+    list(data=data,descrip=descrip)
+  } else {
+    data
+  }
+}
+
+multi.merge = function(...,by=NULL) {
+  Reduce(function(x,y) merge(x,y, all=TRUE,by=by), list(...))
+}
+
+```
+
+
+## Compile ABCD variables
+
+The above function is use to cookup the dataset. Specifically, `mergecols` is used to set values to merge by. Using [c()](https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/c) to concatenate values into a list. The list consists of `subjectkey` and `eventname.` 
+
+Using the `read.abcd` function defined above, a file is read using the `%>%` or [pipe](https://style.tidyverse.org/pipes.html) function in the conjunction with [select()](https://dplyr.tidyverse.org/reference/select.html) to subset the requested variables. For example, *read.abcd("./pdem02.txt")* will subset the subjectkey and eventname that will be used for `by` in column merge, and then our variables of interest. The variables we used are defined and labeled on the 
+
+The variables identified in the manuscript we cross-reference for the associated text file name on the NDA NIMH [data dictionary ABCD release 4.0](https://nda.nih.gov/data_dictionary.html?submission=ALL&source=ABCD%2BRelease%2B4.0). The name for the .txt file is associated with the `short name` on the NIMH data archive. Within each variable pull the associated variables. The list of these are below:
+
+  
+**Demographics**:
+
+*	*General*: age, sex, race/ethnicity, family ID and child sibling status [acspsw03](https://nda.nih.gov/data_structure.html?short_name=acspsw03)
+* Site ID [abcd_lt01](abcd_lt01)
+* Pubertal development [abcd_ssphp01](https://nda-nih-gov.proxy.lib.umich.edu/data_structure.html?short_name=abcd_ssphp01)
+
+```{r echo=TRUE}
+#merging by
+mergecols = c("subjectkey","eventname")
+
+#d demographics
+
+demo = read.abcd("../../../Data/ABCD/NDA_package/Package_1209276/abcd_lt01.txt") %>% 
+  select(subjectkey,
+         eventname,
+         interview_date, 
+         interview_age,
+         sex, 
+         site_id_l
+         )
+
+pds_par = read.abcd("../../../Data/ABCD/NDA_package/Package_1209276/abcd_ssphp01.txt") %>%
+  select(subjectkey,eventname,
+         pds_p_ss_female_category_2,
+         pds_p_ss_male_category_2)
+
+pds_yth = read.abcd("../../../Data/ABCD/NDA_package/Package_1209276/abcd_ssphy01.txt") %>%
+  select(subjectkey,eventname,
+         pds_y_ss_female_category_2,
+         pds_y_ss_male_cat_2)
+
+scanner = read.abcd("../../../Data/ABCD/NDA_package/Package_1209276/abcd_mri01.txt") %>% 
+  select(subjectkey,
+         eventname,
+         scanner = mri_info_manufacturer,
+         model = mri_info_manufacturersmn
+         )
+```
+
+**Brain Measures**
+
+*MID*
+* Series complete and passed QC ()
+
+
+```{r echo=TRUE}
+# MID timeseries QC
+
+MID_rawQC = read.abcd("../../../Data/ABCD/NDA_package/Package_1209276/mriqcrp20301.txt") %>% 
+  select(subjectkey,
+         eventname,
+         iqc_mid_ok_ser
+         )
+
+MID_b0 = read.abcd("../../../Data/ABCD/NDA_package/Package_1209276/abcd_auto_postqc01.txt") %>% 
+  select(subjectkey,
+         eventname,
+         apqc_fmri_bounwarp_flag 
+         # 0 = missing scans required for B0 unwarp; 1 = scans available for B0 unwarp
+         )
+
+MID_postQC = read.abcd("../../../Data/ABCD/NDA_package/Package_1209276/abcd_fmriqc01.txt") %>% 
+  select(subjectkey,
+         eventname,
+         fmri_postqc_qc 
+         # Overall QC score 0 = no disparity; 1 = disparity between raters       
+         )
+
+MID_cutoff_fov = read.abcd("../../../Data/ABCD/NDA_package/Package_1209276/abcd_auto_postqc01.txt") %>% 
+  select(subjectkey,
+         eventname,
+         apqc_fmri_fov_cutoff_dorsal, 
+         apqc_fmri_fov_cutoff_ventral
+         # Maximum ventral cutoff score in fMRI FM images	0 :: 1000      
+         )
+
+MID_acceptBehave = read.abcd("../../../Data/ABCD/NDA_package/Package_1209276/abcd_mid02.txt") %>% 
+  select(subjectkey,
+         eventname,
+         tfmri_mid_beh_performflag
+         # 	1= acceptable; 0= not acceptable
+         )
+
+MID_eprime = read.abcd("../../../Data/ABCD/NDA_package/Package_1209276/mriqcrp302.txt") %>% 
+  select(subjectkey,
+         eventname,
+         iqc_mid_ep_t_series_match,
+         #-1= Either file not found; 0= No match; 1= Match
+         eprime_mismatch_ok_mid
+         # Ignore difference between time of MID image series and MID E-prime file
+         # 1 = Yes; 0 = No
+         )
+
+t1_rawQC = read.abcd("../../../Data/ABCD/NDA_package/Package_1209276/mriqcrp10301.txt") %>% 
+  select(subjectkey,
+         eventname,
+         iqc_t1_ok_ser
+         )
+```
+
+MID task data QC values. Note, not all recommended options from ReproNim are used. Here, the an indepedent preprocessing (fMRIprep) is being used and so QC is performed on a random subset and compared to those general values extracted from DAIRC. 
+
+- MID tsfMRI rawQC ([mriqcrp20301](https://nda.nih.gov/data_structure.html?short_name=mriqcrp20301); iqc_mid_ok_ser > 0)
+- T1 series passed raw QC ([mriqcrp10301](https://nda.nih.gov/data_structure.html?short_name=mriqcrp10301); iqc_t1_ok_ser > 0)
+- MID behavior passed ([abcd_mid02](https://nda.nih.gov/data_structure.html?short_name=abcd_mid02); tfmri_mid_beh_performflag ==1)
+- MID e-prime time atch or ignore e-prime mismatch ([mriqcrp302](https://nda.nih.gov/data_structure.html?short_name=mriqcrp302); iqc_mid_ep_t_series_match == 1 || eprime_mismatch_ok_mid ==1)
+- fmri B0 unwarp available ([abcd_auto_postqc01](https://nda.nih.gov/data_structure.html?short_name=abcd_auto_postqc01) apqc_fmri_bounward_flag == 1)
+- fMRI manual post-process QC not failed ([fmriqc01](https://nda.nih.gov/data_structure.html?short_name=abcd_fmriqc01); fmri_postqc_qc ~= 0)
+- fMRI maximum dorsal cutoff score ([abcd_auto_postqc01](https://nda.nih.gov/data_structure.html?short_name=abcd_auto_postqc01); apqc_fmri_fov_cutoff_dorsal < 65)
+- fmri maximum ventral cutoff score less than 60 (abcd_auto_postqc01; apqc_fmri_fov_cutoff_ventral < 60)
+
+
+## merge data columns
+```{r}
+
+# Merge all above by site/id
+ABCD_MID = multi.merge(demo, pds_par, pds_yth, scanner,MID_acceptBehave, MID_b0, MID_cutoff_fov,MID_eprime,
+                       MID_postQC, MID_rawQC,t1_rawQC,
+                   by=mergecols)
+
+```
+
+
+Now we use the [tidyverse](https://www.rstudio.com/resources/cheatsheets/) to filter our data by baseline data in `eventname`. The release 3.0 ABCD data consists of Baseline, 6 month and 1 year data.
+Also, in some cases there are columns that a repeated in the .txt files which may result in repeat cases. To avoid this, we use the [duplicated](https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/duplicated) command to restrict our data to `unique` subjects.
+
+```{r message=FALSE, warning=FALSE}
+abcd_subset = ABCD_MID %>% filter(eventname ==  "2_year_follow_up_y_arm_1") 
+
+abcd_subset_MID = abcd_subset[!duplicated(abcd_subset),] # created redundant rows, remove
+```
+
+- fMRI maximum dorsal cutoff score ([abcd_auto_postqc01](https://nda.nih.gov/data_structure.html?short_name=abcd_auto_postqc01); apqc_fmri_fov_cutoff_dorsal < 65)
+- fmri maximum ventral cutoff score less than 60 (abcd_auto_postqc01; apqc_fmri_fov_cutoff_ventral < 60)
+
+## Summarize basic info regarding QC info
+```{r}
+abcd_subset_MID %>% 
+  group_by(eventname,tfmri_mid_beh_performflag) %>% 
+  summarise(Acceptable_MID_Perform = n()) 
+
+abcd_subset_MID %>% 
+  group_by(eventname,apqc_fmri_bounwarp_flag) %>% 
+  summarise(Missing_B0 = n()) 
+
+abcd_subset_MID %>% 
+  group_by(eventname,fmri_postqc_qc) %>% 
+  summarise(`manual post-process QC not failed` = n()) 
+
+
+abcd_subset_MID %>% 
+  filter(apqc_fmri_fov_cutoff_dorsal > 65) %>% 
+  group_by(eventname) %>% 
+  summarise(`FOV Cutoff Dorsal Greater than threshold` = n()) 
+
+abcd_subset_MID %>% 
+  filter(apqc_fmri_fov_cutoff_ventral > 60) %>% 
+  group_by(eventname) %>% 
+  summarise(`FOV Cutoff Ventral Greater than threshold` = n())
+
+```
+
+## Export aggregated data to local 
+
+Create single pubertal measure for each, par and youth
+```{r}
+abcd_subset_MID = abcd_subset_MID %>% 
+  mutate(p_puberty = case_when(sex == 'F' ~ pds_p_ss_female_category_2,
+                             sex == 'M' ~ pds_p_ss_male_category_2),
+         y_puberty = case_when(sex == 'F' ~ pds_y_ss_female_category_2,
+                             sex == 'M' ~ pds_y_ss_male_cat_2)
+         )
+```
+
+
+Export the aggregated `abcd` data into a .csv file using [write.csv](https://www.rdocumentation.org/packages/AlphaPart/versions/0.8.4/topics/write.csv). This cooked up data will surve as the starting point for the next phase.
+
+```{r}
+# write file
+write.csv(abcd_subset_MID, "../output/NDA_MID_QC_20230723.csv")
+```
+
