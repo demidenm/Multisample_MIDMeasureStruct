@@ -32,6 +32,7 @@ pacman::p_load(simsem, plyr, stringr, tidyverse,corrplot, reshape2, data.table,g
                )
 
 # get session info 
+# "x86_64-apple-darwin17.0" "R version 4.2.1 (2022-06-23)"
 session_info = sessionInfo()
 
 # create function to round to third decimal the variables if they are nuermic
@@ -82,7 +83,7 @@ rename_columns <- function(df) {
 }
 
 ```
-RMSEA .35 SRMR .20 TLI .06 CI .12
+
 ```{r}
 # color palate for site related plotting
 pal<- c("#1D91C0","#67001F","#CB181D","#78C679","#F46D43","#F7FCFD",
@@ -97,7 +98,7 @@ pal<- c("#1D91C0","#67001F","#CB181D","#78C679","#F46D43","#F7FCFD",
 
 This project is based on the Stage 1 registered report submitted at Developmental Cognitive Neuroscience (Demidenko et al [2022](https://osf.io/a6t8k)). The proposal is to use a sub-sample of the full `Year 2` (follow-up to baseline) ABCD sample. This includes 1000 participants for the initial analysis and a held out 1000 participants for the follow-up LSEM/EFA model.
 
-This html document and .rmd was last ran using the platform: `r session_info$R.version$platform` version: `r `session_info$session_info$R.version$version.string` on `r format(Sys.time(), '%B %Y')` by Michael Demidenko.
+This html document and .rmd was last ran using the platform: `r session_info$R.version$platform` version: `r session_info$R.version$version.string` on `r format(Sys.time(), '%B %Y')` by Michael Demidenko.
 
 
 # Load Data {.tabset}
@@ -1197,12 +1198,20 @@ abcd_colnames = paste("AD",1:abcd_efa$factors)
 
 colnames(abcd_efa$loadings) <- abcd_colnames
 model_parameters(abcd_efa)
+```
 
+```{r}
+# factor corr
 factor_corr_abcd = abcd_efa$Phi
-colnames(factor_corr_abcd) = paste("AD",1:abcd_efa$factors)
+colnames(factor_corr_abcd) = paste(1:abcd_efa$factors)
 rownames(factor_corr_abcd) = paste("AD",1:abcd_efa$factors)
 factor_corr_abcd
+
+corrplot(factor_corr_abcd, method = "color", is.corr = TRUE, 
+         number.digits = 3,addCoef.col = "black",number.cex = .7,
+         tl.cex = .8, tl.col = "black", type = "lower")
 ```
+
 
 
 remove loadings <20 
@@ -1249,20 +1258,25 @@ colnames(ahrb_efa$loadings) <- paste("AB", 1:abcd_efa$factors)
 
 # extract correlation matrix of residuals?
 model_parameters(ahrb_efa)
-
-# factor corr 
-factor_corr_ahrb = ahrb_efa$Phi
-colnames(factor_corr_ahrb) = paste("AB",1:ahrb_efa$factors)
-rownames(factor_corr_ahrb) = paste("AB",1:ahrb_efa$factors)
-factor_corr_ahrb
 ```
 
+```{r}
+# factor corr
+factor_corr_ahrb = ahrb_efa$Phi
+colnames(factor_corr_ahrb) = paste(1:ahrb_efa$factors)
+rownames(factor_corr_ahrb) = paste("AB",1:ahrb_efa$factors)
+factor_corr_ahrb
+
+corrplot(factor_corr_ahrb, method = "color", is.corr = TRUE, 
+         number.digits = 3,addCoef.col = "black",number.cex = .7,
+         tl.cex = .8, tl.col = "black", type = "lower")
+```
 
 remove <.20 loadings and reorder to match ABCD order
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 # reorder factors to maps ABCD order:
-ahrb_efa_loadings_rev <- ahrb_efa$loadings[,c(2,1,4,3,6,5)]
+ahrb_efa_loadings_rev <- ahrb_efa$loadings[,c(2,1,4,3,5,6)]
 
 # dont print values below .20
 ahrb_loadings_thresh <- ahrb_efa_loadings_rev[, 1:ahrb_factors]
@@ -1304,11 +1318,18 @@ mls_colnames = paste0("MS", 1:mls_efa$factors)
 colnames(mls_efa$loadings) <- mls_colnames
 model_parameters(mls_efa)
 
+```
+
+```{r}
 # factor corr
 factor_corr_mls = mls_efa$Phi
-colnames(factor_corr_mls) = paste("AB",1:mls_efa$factors)
-rownames(factor_corr_mls) = paste("AB",1:mls_efa$factors)
+colnames(factor_corr_mls) = paste(c("4","3","2","1","5","7","6"))
+rownames(factor_corr_mls) = paste(c("MS 4","MS 3","MS 2","MS 1","MS 5","MS 7","MS 6"))
 factor_corr_mls
+
+corrplot(factor_corr_mls, method = "color", is.corr = TRUE, 
+         number.digits = 3,addCoef.col = "black",number.cex = .7,
+         tl.cex = .8, tl.col = "black", type = "lower")
 ```
 
 remove <.20 loadings and reorder to match ABCD order
@@ -1370,7 +1391,7 @@ corrplot(fa_cong_table, method = "color", tl.cex = .8, type = "lower")
 
 # relabeled MS1 = MS4 | MS2 = AD3 | MS3 = AD2 | MS4 = AD1 | MS5 = AD6 | MS6 = AD2
 
-ahrb_revised <- c("AB2","AB1","AB4","AB3","AB6","AB5")
+ahrb_revised <- c("AB2","AB1","AB4","AB3","AB5","AB6")
 mls_revised <- c("MS4","MS3","MS2","MS1","MS6","MS5","MS7")
 colnames(fa_cong_table) <- c(abcd_revised,ahrb_revised,mls_revised)
 rownames(fa_cong_table) <- c(abcd_revised,ahrb_revised,mls_revised)
