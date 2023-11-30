@@ -1254,7 +1254,7 @@ ahrb_efa = fa(ahrb_df[,mod_vars], nfactors = ahrb_factors,
 
 ahrb_colnames = paste0("AB", 1:ahrb_efa$factors)
 
-colnames(ahrb_efa$loadings) <- paste("AB", 1:abcd_efa$factors)
+colnames(ahrb_efa$loadings) <- paste("AB", 1:ahrb_efa$factors)
 
 # extract correlation matrix of residuals?
 model_parameters(ahrb_efa)
@@ -1263,8 +1263,8 @@ model_parameters(ahrb_efa)
 ```{r}
 # factor corr
 factor_corr_ahrb = ahrb_efa$Phi
-colnames(factor_corr_ahrb) = paste(1:ahrb_efa$factors)
-rownames(factor_corr_ahrb) = paste("AB",1:ahrb_efa$factors)
+colnames(factor_corr_ahrb) = paste(c("1","2","3","4","5","6"))
+rownames(factor_corr_ahrb) = paste(c("AB 1","AB 2","AB 3","AB 4","AB 5","AB 6"))
 factor_corr_ahrb
 
 corrplot(factor_corr_ahrb, method = "color", is.corr = TRUE, 
@@ -1276,7 +1276,7 @@ remove <.20 loadings and reorder to match ABCD order
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 # reorder factors to maps ABCD order:
-ahrb_efa_loadings_rev <- ahrb_efa$loadings[,c(2,1,4,3,5,6)]
+ahrb_efa_loadings_rev <- ahrb_efa$loadings#[,c(2,1,4,3,6,5)]
 
 # dont print values below .20
 ahrb_loadings_thresh <- ahrb_efa_loadings_rev[, 1:ahrb_factors]
@@ -1323,8 +1323,8 @@ model_parameters(mls_efa)
 ```{r}
 # factor corr
 factor_corr_mls = mls_efa$Phi
-colnames(factor_corr_mls) = paste(c("4","3","2","1","5","7","6"))
-rownames(factor_corr_mls) = paste(c("MS 4","MS 3","MS 2","MS 1","MS 5","MS 7","MS 6"))
+colnames(factor_corr_mls) = paste(c("1","2","3","4","5","6","7"))
+rownames(factor_corr_mls) = paste(c("MS 1","MS 2","MS 3","MS 4","MS 5","MS 6","MS 7"))
 factor_corr_mls
 
 corrplot(factor_corr_mls, method = "color", is.corr = TRUE, 
@@ -1510,7 +1510,9 @@ summary(lsem.MID_yth)
 
 ## Permutation Test LSEM
 
-Running permutation test of LSEM model. N = 1000 bootstraps
+Running permutation test of LSEM model. N = 1000 bootstraps 
+
+(for html report only providing 100 to reduce run time)
 
 ### parent
 ```{r message=FALSE, warning=FALSE, include=FALSE}
@@ -2116,13 +2118,20 @@ abcd_r2 = abcd_run %>%
   filter(Run == 'r2') %>% 
   select(matches(gsub("_r[1-2]$", "", mod_vars))) 
 
-corrplot(cor(abcd_r1), method = "color", tl.pos = "ld", type = "lower", tl.cex = .6, title = "ABCD Run 1", mar = c(0,0,1,0))
-corrplot(cor(abcd_r2), method = "color", tl.pos = "ld", type = "lower", tl.cex = .6, title = "ABCD Run 2", mar = c(0,0,1,0))
-```
-```{r message=FALSE, warning=FALSE}
+corrplot(cor(abcd_r1), method = "color", tl.pos = "ld", number.digits = 2,addCoef.col = "black",number.cex = .4,
+         tl.cex = .6, tl.col = "black", type = "lower",
+         title = "ABCD Run 1", mar = c(0,0,1,0))
 
-label_nacc = c("AWin_v_Neut_L_NAc_r1","BWin_v_Neut_L_NAc_r1","AWin_v_Neut_L_NAc_r2","BWin_v_Neut_L_NAc_r2")
-label_ins = c("AWin_v_Neut_L_Ins_r1","BWin_v_Neut_L_Ins_r1","AWin_v_Neut_L_Ins_r2","BWin_v_Neut_L_Ins_r2")
+corrplot(cor(abcd_r2), method = "color", tl.pos = "ld", number.digits = 2, addCoef.col = "black",number.cex = .4,
+         tl.cex = .8, tl.col = "black", type = "lower", title = "ABCD Run 2", mar = c(0,0,1,0))
+```
+```{r fig.height=14, fig.width=12, message=FALSE, warning=FALSE}
+
+label_nacc = c("AWin_v_Neut_L_NAc_r1","BWin_v_Neut_L_NAc_r1","AWin_v_Neut_L_NAc_r2","BWin_v_Neut_L_NAc_r2",
+               "AWin_v_Neut_R_NAc_r1","BWin_v_Neut_R_NAc_r1","AWin_v_Neut_R_NAc_r2","BWin_v_Neut_R_NAc_r2")
+               
+label_ins = c("AWin_v_Neut_L_Ins_r1","BWin_v_Neut_L_Ins_r1","AWin_v_Neut_L_Ins_r2","BWin_v_Neut_L_Ins_r2",
+              "AWin_v_Neut_R_Ins_r1","BWin_v_Neut_R_Ins_r1","AWin_v_Neut_R_Ins_r2","BWin_v_Neut_R_Ins_r2")
 
 ggpairs(abcd_df[,label_nacc]) + theme_minimal()
 ggpairs(abcd_df[,label_ins]) + theme_minimal()
@@ -2142,10 +2151,12 @@ ahrb_r2 = ahrb_run %>%
   filter(Run == 'r2') %>% 
   select(matches(gsub("_r[1-2]$", "", mod_vars))) 
 
-corrplot(cor(ahrb_r1), method = "color", tl.pos = "ld", type = "lower", tl.cex = .6, title = "AHRB Run 1", mar = c(0,0,1,0))
-corrplot(cor(ahrb_r2), method = "color", tl.pos = "ld", type = "lower", tl.cex = .6, title = "AHRB Run 1", mar = c(0,0,1,0))
+corrplot(cor(ahrb_r1), method = "color", tl.pos = "ld", number.digits = 2, addCoef.col = "black",number.cex = .4,
+         tl.cex = .8, tl.col = "black", type = "lower", title = "AHRB Run 1", mar = c(0,0,1,0))
+corrplot(cor(ahrb_r2), method = "color", tl.pos = "ld", number.digits = 2, addCoef.col = "black",number.cex = .4,
+         tl.cex = .8, tl.col = "black", type = "lower", title = "AHRB Run 1", mar = c(0,0,1,0))
 ```
-```{r message=FALSE, warning=FALSE}
+```{r fig.height=14, fig.width=12, message=FALSE, warning=FALSE}
 ggpairs(ahrb_df[,label_nacc]) + theme_minimal()
 ggpairs(ahrb_df[,label_ins]) + theme_minimal()
 ```
@@ -2165,11 +2176,13 @@ mls_r2 = mls_run %>%
   filter(Run == 'r2') %>% 
   select(matches(gsub("_r[1-2]$", "", mod_vars))) 
 
-corrplot(cor(mls_r1), method = "color", tl.pos = "ld", type = "lower", tl.cex = .6, title = "MLS Run 1", mar = c(0,0,1,0))
-corrplot(cor(mls_r2), method = "color", tl.pos = "ld", type = "lower", tl.cex = .6, title = "MLS Run 1", mar = c(0,0,1,0))
+corrplot(cor(mls_r1), method = "color", tl.pos = "ld", number.digits = 2, addCoef.col = "black",number.cex = .4,
+         tl.cex = .8, tl.col = "black", type = "lower", title = "MLS Run 1", mar = c(0,0,1,0))
+corrplot(cor(mls_r2), method = "color", tl.pos = "ld", number.digits = 2, addCoef.col = "black",number.cex = .4,
+         tl.cex = .8, tl.col = "black", type = "lower", title = "MLS Run 1", mar = c(0,0,1,0))
 ```
 
-```{r message=FALSE, warning=FALSE}
+```{r fig.height=14, fig.width=12, message=FALSE, warning=FALSE}
 ggpairs(mls_df[,label_nacc]) + theme_minimal()
 ggpairs(mls_df[,label_ins]) + theme_minimal()
 ```
