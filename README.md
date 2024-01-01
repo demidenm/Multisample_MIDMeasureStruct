@@ -1,8 +1,8 @@
 [![Funded By](https://img.shields.io/badge/NIDA-F32%20DA055334--01A1-yellowgreen?style=plastic)](https://reporter.nih.gov/project-details/10525501)
 [![RegReport](https://img.shields.io/badge/Stage_1-Registered_Report-red
 )](https://osf.io/a6t8k)
-[![DOI](https://img.shields.io/badge/DOI-Publication-blue
-)](https://osf.io/a6t8k)
+[![Stage 2 RegReport DOI](https://img.shields.io/badge/DOI_Stage_2-Registered_Report-blue
+)](https://doi.org/10.1016/j.dcn.2023.101337)
 
 # Multisample_MIDMeasureStruct
 Project  Title: 
